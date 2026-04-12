@@ -118,7 +118,7 @@ class Shape(object):
                 if min_x != sys.maxsize and min_y != sys.maxsize:
                     font = QFont()
                     font.setPointSize(self.label_font_size)
-                    font.setBold(True)
+                    # Use normal weight for thinner text (not bold)
                     painter.setFont(font)
                     if self.label is None:
                         self.label = ""
