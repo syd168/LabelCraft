@@ -1,5 +1,16 @@
 History
 
+1.8.15 (2026-04-12)
+-------------------
+
+* Removed Close and Save As menu items for streamlined workflow
+* Added batch label input feature in project creation/editing dialog
+* Enhanced label input: support paste from Excel with auto-parse
+* Added "Batch Add" button for convenient multi-label addition
+* Improved user experience: press Enter to add labels instantly
+* Smart duplicate detection when adding multiple labels
+* Updated multi-language strings for new features
+
 1.8.8 (2025-04-12)
 ------------------
 

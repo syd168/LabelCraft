@@ -429,11 +429,6 @@ class MainWindow(QMainWindow, WindowMixin):
                              get_format_meta(self.label_file_format)[1],
                              self.get_str('changeSaveFormat'), enabled=True)
 
-        save_as = action(self.get_str('saveAs'), self.save_file_as,
-                         'Ctrl+Shift+S', 'save-as', self.get_str('saveAsDetail'), enabled=False)
-
-        close = action(self.get_str('closeCur'), self.close_file, 'Ctrl+W', 'close', self.get_str('closeCurDetail'))
-
         delete_image = action(self.get_str('deleteImg'), self.delete_image, 'Ctrl+Shift+D', 'close',
                               self.get_str('deleteImgDetail'))
 
@@ -559,7 +554,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.draw_squares_option.triggered.connect(self.toggle_draw_square)
 
         # Store actions for further handling.
-        self.actions = Struct(save=save, save_format=save_format, saveAs=save_as, open=open, close=close,
+        self.actions = Struct(save=save, save_format=save_format, open=open,
                               resetAll=reset_all, deleteImg=delete_image, quit=quit,
                               lineColor=color1, create=create, delete=delete, edit=edit, copy=copy,
                               createMode=create_mode, editMode=edit_mode, advancedMode=advanced_mode,
@@ -570,7 +565,7 @@ class MainWindow(QMainWindow, WindowMixin):
                               lightBrighten=light_brighten, lightDarken=light_darken, lightOrg=light_org,
                               lightActions=light_actions,
                               fileMenuActions=(
-                                  open, open_dir, save, save_as, close, reset_all, quit),
+                                  open, open_dir, save, reset_all, quit),
                               beginner=(), advanced=(),
                               editMenu=(edit, copy, delete,
                                         None, color1, self.draw_squares_option),
@@ -578,8 +573,8 @@ class MainWindow(QMainWindow, WindowMixin):
                               advancedContext=(create_mode, edit_mode, edit, copy,
                                                delete, shape_line_color, shape_fill_color),
                               onLoadActive=(
-                                  close, create, create_mode, edit_mode),
-                              onShapesPresent=(save_as, hide_all, show_all),
+                                  create, create_mode, edit_mode),
+                              onShapesPresent=(hide_all, show_all),
                               # Add missing actions for language switching
                               openDir=open_dir, changeSaveDir=change_save_dir,
                               openAnnotation=open_annotation, copyPrevBounding=copy_prev_bounding,
@@ -673,7 +668,7 @@ class MainWindow(QMainWindow, WindowMixin):
         add_actions(self.menus.file,
                     (new_project, open_project, edit_project, save_project, close_project, None,
                      self.menus.recentProjects, None,  # Add recent projects menu
-                     save, save_as, close, reset_all, delete_image, quit))
+                     save, reset_all, delete_image, quit))
         
         # Output menu: export and save dir related functions
         add_actions(self.menus.output,
@@ -1357,8 +1352,6 @@ class MainWindow(QMainWindow, WindowMixin):
         scroll_layout.addLayout(create_shortcut_row(self.get_str('openFile'), 'Ctrl+O'))
         scroll_layout.addLayout(create_shortcut_row(self.get_str('openDir'), 'Ctrl+U'))
         scroll_layout.addLayout(create_shortcut_row(self.get_str('save'), 'Ctrl+S'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('saveAs'), 'Ctrl+Shift+S'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('closeCur'), 'Ctrl+W'))
         scroll_layout.addLayout(create_shortcut_row(self.get_str('nextImg'), 'D'))
         scroll_layout.addLayout(create_shortcut_row(self.get_str('prevImg'), 'A'))
 
@@ -1539,9 +1532,6 @@ class MainWindow(QMainWindow, WindowMixin):
             elif self.label_file_format == LabelFileFormat.CREATE_ML:
                 self.actions.save_format.setText('&CreateML')
             self.actions.save_format.setToolTip(self.get_str('changeSaveFormat'))
-        if hasattr(self.actions, 'close'):
-            self.actions.close.setText(self.get_str('closeCur'))
-            self.actions.close.setToolTip(self.get_str('closeCurDetail'))
         if hasattr(self.actions, 'quit'):
             self.actions.quit.setText(self.get_str('quit'))
             self.actions.quit.setToolTip(self.get_str('quitApp'))
@@ -1621,9 +1611,6 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.showAll.setToolTip(self.get_str('showAllBoxDetail'))
         if hasattr(self.actions, 'labels'):
             self.actions.labels.setText(self.get_str('showHide'))
-        if hasattr(self.actions, 'saveAs'):
-            self.actions.saveAs.setText(self.get_str('saveAs'))
-            self.actions.saveAs.setToolTip(self.get_str('saveAsDetail'))
         if hasattr(self.actions, 'resetAll'):
             self.actions.resetAll.setText(self.get_str('resetAll'))
             self.actions.resetAll.setToolTip(self.get_str('resetAllDetail'))
@@ -3168,28 +3155,6 @@ class MainWindow(QMainWindow, WindowMixin):
             # After manual save, auto switch to next image
             self.open_next_image()
 
-    def save_file_as(self, _value=False):
-        assert not self.image.isNull(), "cannot save empty image"
-        self._save_file(self.save_file_dialog())
-
-    def save_file_dialog(self, remove_ext=True):
-        caption = '%s - Choose File' % __appname__
-        filters = 'File (*%s)' % LabelFile.suffix
-        open_dialog_path = self.current_path()
-        dlg = QFileDialog(self, caption, open_dialog_path, filters)
-        dlg.setDefaultSuffix(LabelFile.suffix[1:])
-        dlg.setAcceptMode(QFileDialog.AcceptSave)
-        filename_without_extension = os.path.splitext(self.file_path)[0]
-        dlg.selectFile(filename_without_extension)
-        dlg.setOption(QFileDialog.DontUseNativeDialog, False)
-        if dlg.exec():
-            full_file_path = ustr(dlg.selectedFiles()[0])
-            if remove_ext:
-                return os.path.splitext(full_file_path)[0]  # Return file path without the extension.
-            else:
-                return full_file_path
-        return ''
-
     def _save_file(self, annotation_file_path):
         if annotation_file_path and self.save_labels(annotation_file_path):
             self.set_clean()
@@ -3259,7 +3224,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.set_clean()
         self.toggle_actions(False)
         self.canvas.setEnabled(False)
-        self.actions.saveAs.setEnabled(False)
 
     def delete_image(self):
         delete_path = self.file_path

@@ -5,7 +5,8 @@ Guides users through creating a new annotation project
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                 QLineEdit, QPushButton, QFileDialog, 
                                 QListWidget, QListWidgetItem, QMessageBox,
-                                QGroupBox, QRadioButton, QButtonGroup)
+                                QGroupBox, QRadioButton, QButtonGroup,
+                                QTextEdit, QInputDialog)
 from PySide6.QtCore import Qt
 
 
@@ -78,6 +79,18 @@ class NewProjectDialog(QDialog):
         label_info.setStyleSheet('font-size: 11px;')
         label_layout.addWidget(label_info)
         
+        # Label input area - supports direct input and paste
+        input_hint = QLabel(get_str('labelInputHint'))
+        input_hint.setStyleSheet('font-size: 11px; color: palette(mid);')
+        label_layout.addWidget(input_hint)
+        
+        self.label_input = QTextEdit()
+        self.label_input.setPlaceholderText(get_str('labelInputPlaceholder'))
+        self.label_input.setMaximumHeight(80)
+        # Use keyPressEvent to detect Enter key
+        self.label_input.installEventFilter(self)
+        label_layout.addWidget(self.label_input)
+        
         self.label_list = QListWidget()
         self.label_list.setMinimumHeight(100)
         label_layout.addWidget(self.label_list)
@@ -87,10 +100,16 @@ class NewProjectDialog(QDialog):
         add_label_btn.clicked.connect(self.add_label)
         remove_label_btn = QPushButton(get_str('removeLabel'))
         remove_label_btn.clicked.connect(self.remove_label)
+        clear_labels_btn = QPushButton(get_str('clearLabels'))
+        clear_labels_btn.clicked.connect(self.clear_labels)
+        batch_add_btn = QPushButton(get_str('batchAddLabels'))
+        batch_add_btn.clicked.connect(self.parse_and_add_labels)
         load_labels_btn = QPushButton(get_str('loadLabelsFromFile'))
         load_labels_btn.clicked.connect(self.load_labels_from_file)
         label_btn_layout.addWidget(add_label_btn)
+        label_btn_layout.addWidget(batch_add_btn)
         label_btn_layout.addWidget(remove_label_btn)
+        label_btn_layout.addWidget(clear_labels_btn)
         label_btn_layout.addStretch()
         label_btn_layout.addWidget(load_labels_btn)
         label_layout.addLayout(label_btn_layout)
@@ -149,9 +168,52 @@ class NewProjectDialog(QDialog):
         if dir_path:
             self.dir_input.setText(dir_path)
     
+    def eventFilter(self, obj, event):
+        """Event filter to catch Enter key in label input"""
+        from PySide6.QtCore import QEvent
+        if obj == self.label_input and event.type() == QEvent.KeyPress:
+            from PySide6.QtGui import QKeyEvent
+            from PySide6.QtCore import Qt
+            key_event = QKeyEvent(event)
+            # Check for Enter or Return key (without Shift/Ctrl/Alt)
+            if key_event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                if not key_event.modifiers() & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier):
+                    self.parse_and_add_labels()
+                    return True  # Event handled
+        return super().eventFilter(obj, event)
+    
+    def parse_and_add_labels(self):
+        """Parse labels from text input and add them to the list"""
+        text = self.label_input.toPlainText().strip()
+        if not text:
+            return
+        
+        # Split by newlines, commas, or spaces
+        import re
+        labels = re.split(r'[\n,，\s]+', text)
+        labels = [label.strip() for label in labels if label.strip()]
+        
+        # Add new labels that don't exist yet
+        added_count = 0
+        duplicate_count = 0
+        for label in labels:
+            if label not in self.labels:
+                self.labels.append(label)
+                self.label_list.addItem(label)
+                added_count += 1
+            else:
+                duplicate_count += 1
+        
+        # Clear input after adding
+        if added_count > 0:
+            self.label_input.clear()
+            # Show feedback
+            get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+            if duplicate_count > 0:
+                print(f"Added {added_count} labels, skipped {duplicate_count} duplicates")
+    
     def add_label(self):
         """Add a label from input dialog"""
-        from PySide6.QtWidgets import QInputDialog
         get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
         label, ok = QInputDialog.getText(self, get_str('addLabelDialogTitle'), get_str('addLabelPrompt'))
         if ok and label.strip():
@@ -161,6 +223,19 @@ class NewProjectDialog(QDialog):
                 self.label_list.addItem(label)
             else:
                 QMessageBox.warning(self, get_str('warningTitle'), get_str('labelExistsWarning').format(label))
+    
+    def clear_labels(self):
+        """Clear all labels"""
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+        reply = QMessageBox.question(
+            self, get_str('clearLabelsConfirmTitle'),
+            get_str('clearLabelsConfirmMsg'),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.labels.clear()
+            self.label_list.clear()
     
     def remove_label(self):
         """Remove selected label"""
