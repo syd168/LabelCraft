@@ -1,5 +1,5 @@
 # Copyright (c) 2016 Tzutalin
-# Create by TzuTaLin <tzu.ta.lin@gmail.com>
+# Original labelImg project: https://github.com/tzutalin/labelImg
 
 from PySide6.QtGui import QImage
 

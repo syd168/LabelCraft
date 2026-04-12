@@ -3,8 +3,7 @@
 
 """
 Name: label_to_csv.py
-Author: Justin Ruan
-Contact: justin900429@gmail.com
+Description: Convert annotation files to CSV format
 Time: 2021.02.06
 """
 
