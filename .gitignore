@@ -52,6 +52,8 @@ libs/resources.py
 RELEASE_NOTES.md
 
 # Documentation (keep locally, not tracked by Git)
-doc/
+doc/TRANSLATION_GUIDE.md
+doc/安装标注工具.md
+doc/打包说明.md
 
 build-tools/
