@@ -107,7 +107,7 @@ class Shape(object):
             painter.drawPath(vertex_path)
             painter.fillPath(vertex_path, self.vertex_fill_color)
 
-            # Draw text at the top-left
+            # Draw text at the top-left with outline for better visibility
             if self.paint_label:
                 min_x = sys.maxsize
                 min_y = sys.maxsize
@@ -124,7 +124,20 @@ class Shape(object):
                         self.label = ""
                     if min_y < min_y_label:
                         min_y += min_y_label
-                    painter.drawText(int(min_x), int(min_y), self.label)
+                    
+                    # Draw text with white outline for better visibility
+                    text_path = QPainterPath()
+                    text_path.addText(int(min_x), int(min_y), font, self.label)
+                    
+                    # Draw outline (stroke) first - white color
+                    outline_pen = QPen(QColor(255, 255, 255, 200))
+                    outline_pen.setWidth(2)
+                    outline_pen.setJoinStyle(Qt.RoundJoin)
+                    painter.setPen(outline_pen)
+                    painter.drawPath(text_path)
+                    
+                    # Draw fill - black color
+                    painter.fillPath(text_path, QColor(0, 0, 0, 200))
 
             if self.fill:
                 color = self.select_fill_color if self.selected else self.fill_color
