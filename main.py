@@ -354,6 +354,15 @@ class MainWindow(QMainWindow, WindowMixin):
             QListWidget::item:selected {
                 color: palette(highlighted-text);
             }
+            /* Ensure GroupBox titles have consistent font size */
+            QGroupBox {
+                font-size: 13px;
+                font-weight: bold;
+            }
+            /* QPushButton font size for consistency */
+            QPushButton {
+                font-size: 13px;
+            }
         """)
 
         # Actions
@@ -950,6 +959,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 max-height: 28px;
                 padding: 2px 4px;
                 margin: 1px 0px;
+                font-size: 13px;
             }
             /* Allow slider widgets to display properly */
             QWidget {
@@ -1139,7 +1149,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Welcome message
         welcome_label = QLabel('Welcome to LabelCraft!')
-        welcome_label.setStyleSheet('font-size: 16px; font-weight: bold; color: #2c3e50;')
+        welcome_label.setStyleSheet('font-size: 16px; font-weight: bold;')
         welcome_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(welcome_label)
         
@@ -1305,12 +1315,11 @@ class MainWindow(QMainWindow, WindowMixin):
     def show_shortcuts_dialog(self):
         """Show a dialog with all keyboard shortcuts"""
 
-        # Define title style
+        # Define title style (theme-adaptive, no hardcoded colors)
         title_style = """
             QLabel {
                 font-size: 14px;
                 font-weight: bold;
-                color: #2c3e50;
                 padding: 5px 0px;
             }
         """
