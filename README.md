@@ -30,7 +30,7 @@ LabelCraft 是一个现代化的图形化图像标注工具，支持在图像中
 
 ## 📸 截图
 
-![LabelImg Screenshot](resources/icons/app.png)
+![LabelImg Screenshot](resources/icons/app_screen.png)
 
 ## 🚀 快速开始
 
@@ -214,11 +214,128 @@ LabelCraft/
 3. 翻译所有字符串
 4. 重新编译资源文件
 
+```bash
+# 编译资源文件
+make pyside6
+# 或
+pyside6-rcc -o libs/resources.py resources.qrc
+```
+
 ### 运行测试
 
 ```bash
 python -m unittest discover tests
 ```
+
+## 📦 编译与打包
+
+### 本地打包
+
+项目提供了跨平台的自动化构建脚本，位于 `build-tools/` 目录：
+
+#### Linux 打包
+```bash
+cd build-tools
+chmod +x build-linux.sh
+./build-linux.sh
+```
+输出: `dist/linux_labelCraft_<version>.tar.gz`
+
+#### Windows 打包（使用Wine交叉编译）
+```bash
+cd build-tools
+chmod +x build-windows.sh
+./build-windows.sh
+```
+输出: `dist/windows_labelCraft_<version>.zip`
+
+**首次使用需要安装Wine和Windows Python:**
+```bash
+# 安装Wine
+sudo apt install wine64
+
+# 下载并安装Python for Windows
+wget https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe
+wine python-3.11.0-amd64.exe
+```
+
+#### macOS 打包
+```bash
+cd build-tools
+chmod +x build-macos.sh
+./build-macos.sh
+```
+输出: `dist/macOS_labelCraft_<version>.zip` 和 `.dmg`
+
+#### PyPI 包打包
+```bash
+cd build-tools
+chmod +x build-pypi.sh
+./build-pypi.sh
+```
+生成wheel和source distribution包。
+
+详细构建说明请查看 [build-tools/README.md](build-tools/README.md)
+
+## 🚀 发布与部署
+
+### GitHub Actions 自动化发布（推荐）
+
+本项目配置了完整的CI/CD流程，可以自动构建和发布：
+
+#### 自动触发条件
+
+- **每次Push**: 自动运行多平台测试（Ubuntu/Windows/macOS × Python 3.9-3.12）
+- **创建Tag**: 自动构建所有平台可执行文件并发布到GitHub Releases
+
+#### 发布新版本步骤
+
+**Step 1: 更新版本号**
+
+编辑 `libs/__init__.py`:
+```python
+__version__ = '1.0.0'  # 修改版本号
+```
+
+**Step 2: 提交并打标签**
+```bash
+git add libs/__init__.py
+git commit -m "Bump version to 1.0.0"
+git tag v1.0.0
+git push origin main --tags
+```
+
+**Step 3: 等待自动构建**
+
+访问 `https://github.com/syd168/LabelCraft/actions` 查看构建进度。
+
+**Step 4: 下载发布版本**
+
+构建完成后，访问:
+- **GitHub Releases**: `https://github.com/syd168/LabelCraft/releases/tag/v1.0.0`
+- 包含Linux、Windows、macOS三个平台的可执行文件
+
+#### 配置PyPI自动发布（可选）
+
+如需自动发布到PyPI:
+
+1. 从 [pypi.org](https://pypi.org/manage/account/token/) 获取API Token
+2. 在GitHub仓库设置中添加Secret:
+   - Settings → Secrets and variables → Actions
+   - 新建Repository secret
+   - Name: `PYPI_API_TOKEN`
+   - Value: 你的PyPI token
+
+下次创建tag时会自动发布到PyPI。
+
+### 手动触发构建
+
+1. 访问GitHub仓库的 **Actions** 标签
+2. 选择 **Build Releases** 工作流
+3. 点击 **Run workflow**
+4. 选择分支并运行
+
+详细CI/CD说明请查看 [doc/打包说明.md](doc/打包说明.md)
 
 ## ❓ 常见问题
 

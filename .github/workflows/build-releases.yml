@@ -100,6 +100,12 @@ jobs:
             --hidden-import=PySide6.QtWidgets \
             --hidden-import=lxml \
             --hidden-import=lxml.etree \
+            --hidden-import=xml.etree \
+            --hidden-import=xml.etree.ElementTree \
+            --hidden-import=json \
+            --hidden-import=csv \
+            --hidden-import=io \
+            --hidden-import=codecs \
             main.py
             
         # Create distribution package

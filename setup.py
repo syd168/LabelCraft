@@ -49,6 +49,10 @@ OPTIONS = {
         'lxml',
         'xml',
         'xml.etree',
+        'json',
+        'csv',
+        'io',
+        'codecs',
     ],
     'excludes': [
         'PySide6.QtNetwork',

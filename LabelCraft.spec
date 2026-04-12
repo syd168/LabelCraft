@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = ['PySide6', 'PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'lxml', 'lxml.etree', 'xml.etree', 'xml.etree.ElementTree']
+hiddenimports = ['PySide6', 'PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'lxml', 'lxml.etree', 'xml.etree', 'xml.etree.ElementTree', 'json', 'csv', 'io', 'codecs']
 hiddenimports += collect_submodules('xml')
 
 

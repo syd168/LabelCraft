@@ -121,11 +121,11 @@ echo "正在启动 LabelCraft..."
 echo ""
 
 # 移除 --rebuild 或 -r 参数，不传递给 main.py
-LABELIMG_ARGS=()
+LABELCRAFT=()
 for arg in "$@"; do
     if [[ "$arg" != "--rebuild" && "$arg" != "-r" ]]; then
-        LABELIMG_ARGS+=("$arg")
+        LABELCRAFT+=("$arg")
     fi
 done
 
-python main.py "${LABELIMG_ARGS[@]}"
+python main.py "${LABELCRAFT[@]}"

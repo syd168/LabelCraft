@@ -30,7 +30,7 @@ LabelCraft is a modern graphical image annotation tool that supports annotating 
 
 ## 📸 Screenshot
 
-![LabelCraft Screenshot](resources/icons/app.png)
+![LabelCraft Screenshot](resources/icons/app_screen.png)
 
 ## 🚀 Quick Start
 

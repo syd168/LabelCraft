@@ -329,6 +329,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setCentralWidget(central_splitter)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self.dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        # Set reasonable default width for right panel (250 pixels)
+        self.dock.setMinimumWidth(200)
+        self.dock.setMaximumWidth(350)
 
         self.dock_features = QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         self.dock.setFeatures(self.dock.features() ^ self.dock_features)

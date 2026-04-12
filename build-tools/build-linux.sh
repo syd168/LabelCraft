@@ -64,6 +64,10 @@ pyinstaller --name=LabelCraft \
     --hidden-import=lxml.etree \
     --hidden-import=xml.etree \
     --hidden-import=xml.etree.ElementTree \
+    --hidden-import=json \
+    --hidden-import=csv \
+    --hidden-import=io \
+    --hidden-import=codecs \
     --collect-submodules=xml \
     --icon=resources/icons/app.png \
     main.py
