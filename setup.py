@@ -110,7 +110,7 @@ setup(
     long_description=readme + '\n\n' + history,
     long_description_content_type='text/markdown' if 'README.md' in [f for f in os.listdir(here) if f.startswith('README')] else 'text/x-rst',
     author="LabelCraft Contributors",
-    author_email='https://github.com/syd168/LabelCraft',
+    author_email='syd168@users.noreply.github.com',
     url='https://github.com/syd168/LabelCraft',
     python_requires=REQUIRES_PYTHON,
     py_modules=['main', 'resources'],
