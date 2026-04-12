@@ -61,6 +61,42 @@ start.bat
 4. 编译资源文件
 5. 启动 LabelCraft
 
+### 从 PyPI 安装（最简单）
+
+如果你只想使用 LabelCraft，不需要修改源码，可以直接从 PyPI 安装：
+
+```bash
+# 安装到当前 Python 环境
+pip install labelcraft
+
+# 或者安装到虚拟环境（推荐）
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+pip install labelcraft
+```
+
+安装完成后，可以直接运行：
+```bash
+labelcraft  # 直接启动图形界面
+```
+
+或者指定图像路径：
+```bash
+labelcraft /path/to/image.jpg
+labelcraft /path/to/images/ /path/to/classes.txt /path/to/annotations/
+```
+
+**更新到最新版本：**
+```bash
+pip install --upgrade labelcraft
+```
+
+**卸载：**
+```bash
+pip uninstall labelcraft
+```
+
 ### 手动安装
 
 如果你更喜欢手动安装，可以按照以下步骤：
