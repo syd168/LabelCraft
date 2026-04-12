@@ -1,4 +1,28 @@
 History
+
+1.8.8 (2025-04-12)
+------------------
+
+* Fixed i18n: Added get_str() instance method for all dialogs
+* Fixed export: Enhanced image path detection for YOLO and CSV formats
+* Fixed export: Added SameFileError check when copying images
+* Fixed project close: Auto-save current image annotation before closing
+* Updated start scripts to English output for international users
+* Improved README with pip installation guide
+* Removed deprecated language files (fa-FA, de-DE)
+* Enhanced annotation converter with multi-location image search
+
+1.8.7 (2024-XX-XX)
+------------------
+
+* Based on labelImg project
+* Added modern UI improvements
+* Enhanced multi-language support
+* Added brightness adjustment feature
+* Improved annotation workflow
+* Added GitHub Actions CI/CD
+
+Note: This project is a fork and enhancement of the original labelImg project.
 =======
 
 1.8.6 (2024-XX-XX)

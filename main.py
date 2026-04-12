@@ -60,7 +60,7 @@ class WindowMixin(object):
         
         # Enable toggle button for the toolbar
         toolbar.setMovable(False)  # Prevent moving
-        # Note: The toggle text will be set later in __init__ using get_str()
+        # Note: The toggle text will be set later in __init__ using self.get_str()
         toolbar.toggleViewAction().setShortcut('Ctrl+T')
         
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar)
@@ -83,7 +83,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Load string bundle for i18n
         self.string_bundle = StringBundle.get_bundle()
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
 
         # Save as Pascal voc xml
         self.default_save_dir = default_save_dir
@@ -126,7 +125,7 @@ class MainWindow(QMainWindow, WindowMixin):
         list_layout.setContentsMargins(0, 0, 0, 0)
 
         # Create a widget for using default label
-        self.use_default_label_checkbox = QCheckBox(get_str('useDefaultLabel'))
+        self.use_default_label_checkbox = QCheckBox(self.get_str('useDefaultLabel'))
         self.use_default_label_checkbox.setChecked(False)
         self.default_label_combo_box = DefaultLabelComboBox(self, items=self.label_hist)
 
@@ -137,7 +136,7 @@ class MainWindow(QMainWindow, WindowMixin):
         use_default_label_container.setLayout(use_default_label_qhbox_layout)
 
         # Create a widget for edit and diffc button
-        self.diffc_button = QCheckBox(get_str('useDifficult'))
+        self.diffc_button = QCheckBox(self.get_str('useDifficult'))
         self.diffc_button.setChecked(False)
         self.diffc_button.stateChanged.connect(self.button_state)
         self.edit_button = QToolButton()
@@ -160,7 +159,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Create dock widget (remove title, will be hidden)
         self.dock = QDockWidget('', self)
-        self.dock.setObjectName(get_str('labels'))
+        self.dock.setObjectName(self.get_str('labels'))
         self.dock.setTitleBarWidget(QWidget())  # Hide the title bar
         
         # Create unified right panel with all sections
@@ -169,14 +168,14 @@ class MainWindow(QMainWindow, WindowMixin):
         right_panel_layout.setSpacing(10)
         
         # Section 1: Output settings
-        output_group = QGroupBox(get_str('outputSettings'))
+        output_group = QGroupBox(self.get_str('outputSettings'))
         output_layout = QVBoxLayout()
         output_layout.setSpacing(5)
         
         # Output path (read-only label)
         output_path_layout = QHBoxLayout()
-        output_path_label = QLabel(get_str('outputPath'))
-        self.output_dir_label = QLabel(get_str('notSet'))
+        output_path_label = QLabel(self.get_str('outputPath'))
+        self.output_dir_label = QLabel(self.get_str('notSet'))
         self.output_dir_label.setStyleSheet('color: #666; padding: 2px;')
         output_path_layout.addWidget(output_path_label)
         output_path_layout.addWidget(self.output_dir_label)
@@ -185,8 +184,8 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Output format (read-only label)
         output_format_layout = QHBoxLayout()
-        output_format_label = QLabel(get_str('outputFormat'))
-        self.output_format_label = QLabel(get_str('exportFormatVOC').split('(')[0].strip())  # Extract 'PASCAL VOC' without extension
+        output_format_label = QLabel(self.get_str('outputFormat'))
+        self.output_format_label = QLabel(self.get_str('exportFormatVOC').split('(')[0].strip())  # Extract 'PASCAL VOC' without extension
         self.output_format_label.setStyleSheet('color: #666; padding: 2px;')
         output_format_layout.addWidget(output_format_label)
         output_format_layout.addWidget(self.output_format_label)
@@ -197,7 +196,7 @@ class MainWindow(QMainWindow, WindowMixin):
         default_label_layout = QHBoxLayout()
         default_label_layout.setSpacing(5)
         
-        self.use_default_label_checkbox = QCheckBox(get_str('defaultLabel'))
+        self.use_default_label_checkbox = QCheckBox(self.get_str('defaultLabel'))
         self.use_default_label_checkbox.setChecked(False)
         # Initialize with empty list, will be populated when loading project or labels
         self.default_label_combo_box = DefaultLabelComboBox(self, items=[])
@@ -214,7 +213,7 @@ class MainWindow(QMainWindow, WindowMixin):
         right_panel_layout.addWidget(output_group)
         
         # Section 3: Label filter (combo box) - filter shapes by label
-        filter_label_group = QGroupBox(get_str('labelFilter'))
+        filter_label_group = QGroupBox(self.get_str('labelFilter'))
         filter_label_layout = QVBoxLayout()
         filter_label_layout.setSpacing(5)
         # Initialize with empty list, will be updated when loading labels
@@ -224,7 +223,7 @@ class MainWindow(QMainWindow, WindowMixin):
         right_panel_layout.addWidget(filter_label_group)
         
         # Section 4: Label list
-        label_list_group = QGroupBox(get_str('labelList'))
+        label_list_group = QGroupBox(self.get_str('labelList'))
         label_list_layout_inner = QVBoxLayout()
         label_list_layout_inner.setSpacing(5)
         
@@ -238,7 +237,7 @@ class MainWindow(QMainWindow, WindowMixin):
         right_panel_layout.addWidget(label_list_group)
         
         # Section 5: Completed annotations (scan from annotations directory)
-        completed_group = QGroupBox(get_str('completedAnnotations'))
+        completed_group = QGroupBox(self.get_str('completedAnnotations'))
         completed_layout = QVBoxLayout()
         completed_layout.setSpacing(5)
         
@@ -254,8 +253,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.dock.setWidget(label_list_container)
 
         # Create main widgets
-        self.zoom_widget = ZoomWidget(title=get_str('zoomin'))
-        self.light_widget = LightWidget(get_str('lightWidgetTitle'))
+        self.zoom_widget = ZoomWidget(title=self.get_str('zoomin'))
+        self.light_widget = LightWidget(self.get_str('lightWidgetTitle'))
         self.color_dialog = ColorDialog(parent=self)
 
         self.canvas = Canvas(parent=self)
@@ -301,11 +300,11 @@ class MainWindow(QMainWindow, WindowMixin):
         # Buttons for pending queue - horizontal layout
         pending_btn_layout = QHBoxLayout()
         pending_btn_layout.setSpacing(5)
-        add_images_btn = QPushButton(get_str('addImages'))
+        add_images_btn = QPushButton(self.get_str('addImages'))
         add_images_btn.clicked.connect(self.add_images_to_pending)
-        add_folder_btn = QPushButton(get_str('addFolder'))
+        add_folder_btn = QPushButton(self.get_str('addFolder'))
         add_folder_btn.clicked.connect(self.add_folder_to_pending)
-        clear_pending_btn = QPushButton(get_str('clearPending'))
+        clear_pending_btn = QPushButton(self.get_str('clearPending'))
         clear_pending_btn.clicked.connect(self.clear_pending_queue)
         pending_btn_layout.addWidget(add_images_btn)
         pending_btn_layout.addWidget(add_folder_btn)
@@ -351,50 +350,50 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Actions
         action = partial(new_action, self)
-        quit = action(get_str('quit'), self.close,
-                      'Ctrl+Q', 'quit', get_str('quitApp'))
+        quit = action(self.get_str('quit'), self.close,
+                      'Ctrl+Q', 'quit', self.get_str('quitApp'))
 
-        open = action(get_str('openFile'), self.open_file,
-                      'Ctrl+O', 'open', get_str('openFileDetail'))
+        open = action(self.get_str('openFile'), self.open_file,
+                      'Ctrl+O', 'open', self.get_str('openFileDetail'))
 
-        open_dir = action(get_str('openDir'), self.open_dir_dialog,
-                          'Ctrl+u', 'open', get_str('openDir'))
+        open_dir = action(self.get_str('openDir'), self.open_dir_dialog,
+                          'Ctrl+u', 'open', self.get_str('openDir'))
 
-        change_save_dir = action(get_str('changeSaveDir'), self.change_save_dir_dialog,
-                                 'Ctrl+r', 'open', get_str('changeSavedAnnotationDir'))
+        change_save_dir = action(self.get_str('changeSaveDir'), self.change_save_dir_dialog,
+                                 'Ctrl+r', 'open', self.get_str('changeSavedAnnotationDir'))
 
-        open_annotation = action(get_str('openAnnotation'), self.open_annotation_dialog,
-                                 'Ctrl+Shift+O', 'open', get_str('openAnnotationDetail'))
-        copy_prev_bounding = action(get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+v', 'copy',
-                                    get_str('copyPrevBounding'))
+        open_annotation = action(self.get_str('openAnnotation'), self.open_annotation_dialog,
+                                 'Ctrl+Shift+O', 'open', self.get_str('openAnnotationDetail'))
+        copy_prev_bounding = action(self.get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+v', 'copy',
+                                    self.get_str('copyPrevBounding'))
         
         # Export annotations action
-        export_annotations = action(get_str('exportAnnotations'), self.export_annotations_dialog,
-                                    'Ctrl+E', 'save-as', get_str('exportAnnotationsDetail'))
+        export_annotations = action(self.get_str('exportAnnotations'), self.export_annotations_dialog,
+                                    'Ctrl+E', 'save-as', self.get_str('exportAnnotationsDetail'))
         
         # Project management actions
-        new_project = action(get_str('newProject'), self.new_project_dialog,
-                            'Ctrl+N', 'new', get_str('newProjectDetail'))
-        open_project = action(get_str('openProject'), self.open_project_dialog,
-                             'Ctrl+O', 'open', get_str('openProjectDetail'))
-        edit_project = action(get_str('editProject'), self.edit_project_dialog,
-                             'Ctrl+E', 'edit', get_str('editProjectDetail'), enabled=False)
-        save_project = action(get_str('saveProject'), self.save_project,
-                             'Ctrl+S', 'save', get_str('saveProjectDetail'), enabled=False)
-        close_project = action(get_str('closeProject'), self.close_project,
-                              'Ctrl+Shift+C', 'close', get_str('closeProjectDetail'), enabled=False)
+        new_project = action(self.get_str('newProject'), self.new_project_dialog,
+                            'Ctrl+N', 'new', self.get_str('newProjectDetail'))
+        open_project = action(self.get_str('openProject'), self.open_project_dialog,
+                             'Ctrl+O', 'open', self.get_str('openProjectDetail'))
+        edit_project = action(self.get_str('editProject'), self.edit_project_dialog,
+                             'Ctrl+E', 'edit', self.get_str('editProjectDetail'), enabled=False)
+        save_project = action(self.get_str('saveProject'), self.save_project,
+                             'Ctrl+S', 'save', self.get_str('saveProjectDetail'), enabled=False)
+        close_project = action(self.get_str('closeProject'), self.close_project,
+                              'Ctrl+Shift+C', 'close', self.get_str('closeProjectDetail'), enabled=False)
 
-        open_next_image = action(get_str('nextImg'), self.open_next_image,
-                                 'd', 'next', get_str('nextImgDetail'))
+        open_next_image = action(self.get_str('nextImg'), self.open_next_image,
+                                 'd', 'next', self.get_str('nextImgDetail'))
 
-        open_prev_image = action(get_str('prevImg'), self.open_prev_image,
-                                 'a', 'prev', get_str('prevImgDetail'))
+        open_prev_image = action(self.get_str('prevImg'), self.open_prev_image,
+                                 'a', 'prev', self.get_str('prevImgDetail'))
 
-        verify = action(get_str('verifyImg'), self.verify_image,
-                        'space', 'verify', get_str('verifyImgDetail'))
+        verify = action(self.get_str('verifyImg'), self.verify_image,
+                        'space', 'verify', self.get_str('verifyImgDetail'))
 
-        save = action(get_str('save'), self.save_file,
-                      'Ctrl+S', 'save', get_str('saveDetail'), enabled=False)
+        save = action(self.get_str('save'), self.save_file,
+                      'Ctrl+S', 'save', self.get_str('saveDetail'), enabled=False)
 
         def get_format_meta(format):
             """
@@ -410,49 +409,49 @@ class MainWindow(QMainWindow, WindowMixin):
         save_format = action(get_format_meta(self.label_file_format)[0],
                              self.change_format, 'Ctrl+Y',
                              get_format_meta(self.label_file_format)[1],
-                             get_str('changeSaveFormat'), enabled=True)
+                             self.get_str('changeSaveFormat'), enabled=True)
 
-        save_as = action(get_str('saveAs'), self.save_file_as,
-                         'Ctrl+Shift+S', 'save-as', get_str('saveAsDetail'), enabled=False)
+        save_as = action(self.get_str('saveAs'), self.save_file_as,
+                         'Ctrl+Shift+S', 'save-as', self.get_str('saveAsDetail'), enabled=False)
 
-        close = action(get_str('closeCur'), self.close_file, 'Ctrl+W', 'close', get_str('closeCurDetail'))
+        close = action(self.get_str('closeCur'), self.close_file, 'Ctrl+W', 'close', self.get_str('closeCurDetail'))
 
-        delete_image = action(get_str('deleteImg'), self.delete_image, 'Ctrl+Shift+D', 'close',
-                              get_str('deleteImgDetail'))
+        delete_image = action(self.get_str('deleteImg'), self.delete_image, 'Ctrl+Shift+D', 'close',
+                              self.get_str('deleteImgDetail'))
 
-        reset_all = action(get_str('resetAll'), self.reset_all, None, 'resetall', get_str('resetAllDetail'))
+        reset_all = action(self.get_str('resetAll'), self.reset_all, None, 'resetall', self.get_str('resetAllDetail'))
 
-        color1 = action(get_str('boxLineColor'), self.choose_color1,
-                        'Ctrl+L', 'color_line', get_str('boxLineColorDetail'))
+        color1 = action(self.get_str('boxLineColor'), self.choose_color1,
+                        'Ctrl+L', 'color_line', self.get_str('boxLineColorDetail'))
 
-        create_mode = action(get_str('crtBox'), self.set_create_mode,
-                             'w', 'new', get_str('crtBoxDetail'), enabled=False)
-        edit_mode = action(get_str('editBox'), self.set_edit_mode,
-                           'Ctrl+J', 'edit', get_str('editBoxDetail'), enabled=False)
+        create_mode = action(self.get_str('crtBox'), self.set_create_mode,
+                             'w', 'new', self.get_str('crtBoxDetail'), enabled=False)
+        edit_mode = action(self.get_str('editBox'), self.set_edit_mode,
+                           'Ctrl+J', 'edit', self.get_str('editBoxDetail'), enabled=False)
 
-        create = action(get_str('crtBox'), self.create_shape,
-                        'w', 'new', get_str('crtBoxDetail'), enabled=False)
-        delete = action(get_str('delBox'), self.delete_selected_shape,
-                        'Delete', 'delete', get_str('delBoxDetail'), enabled=False)
-        copy = action(get_str('dupBox'), self.copy_selected_shape,
-                      'Ctrl+D', 'copy', get_str('dupBoxDetail'),
+        create = action(self.get_str('crtBox'), self.create_shape,
+                        'w', 'new', self.get_str('crtBoxDetail'), enabled=False)
+        delete = action(self.get_str('delBox'), self.delete_selected_shape,
+                        'Delete', 'delete', self.get_str('delBoxDetail'), enabled=False)
+        copy = action(self.get_str('dupBox'), self.copy_selected_shape,
+                      'Ctrl+D', 'copy', self.get_str('dupBoxDetail'),
                       enabled=False)
 
-        advanced_mode = action(get_str('advancedMode'), self.toggle_advanced_mode,
-                               'Ctrl+Shift+A', 'expert', get_str('advancedModeDetail'),
+        advanced_mode = action(self.get_str('advancedMode'), self.toggle_advanced_mode,
+                               'Ctrl+Shift+A', 'expert', self.get_str('advancedModeDetail'),
                                checkable=True)
 
-        hide_all = action(get_str('hideAllBox'), partial(self.toggle_polygons, False),
-                          'Ctrl+H', 'hide', get_str('hideAllBoxDetail'),
+        hide_all = action(self.get_str('hideAllBox'), partial(self.toggle_polygons, False),
+                          'Ctrl+H', 'hide', self.get_str('hideAllBoxDetail'),
                           enabled=False)
-        show_all = action(get_str('showAllBox'), partial(self.toggle_polygons, True),
-                          'Ctrl+A', 'hide', get_str('showAllBoxDetail'),
+        show_all = action(self.get_str('showAllBox'), partial(self.toggle_polygons, True),
+                          'Ctrl+A', 'hide', self.get_str('showAllBoxDetail'),
                           enabled=False)
 
-        help_default = action(get_str('tutorialDefault'), self.show_default_tutorial_dialog, None, 'help',
-                              get_str('tutorialDetail'))
-        show_info = action(get_str('info'), self.show_info_dialog, None, 'help', get_str('info'))
-        self.show_shortcut = action(get_str('shortcut'), self.show_shortcuts_dialog, None, 'help', get_str('shortcut'))
+        help_default = action(self.get_str('tutorialDefault'), self.show_default_tutorial_dialog, None, 'help',
+                              self.get_str('tutorialDetail'))
+        show_info = action(self.get_str('info'), self.show_info_dialog, None, 'help', self.get_str('info'))
+        self.show_shortcut = action(self.get_str('shortcut'), self.show_shortcuts_dialog, None, 'help', self.get_str('shortcut'))
 
         # Create zoom widget with slider and label
         zoom_widget_container = self.zoom_widget.create_widget_with_label()
@@ -465,17 +464,17 @@ class MainWindow(QMainWindow, WindowMixin):
                                              format_shortcut("Ctrl+Wheel")))
         self.zoom_widget.setEnabled(False)
 
-        zoom_in = action(get_str('zoomin'), partial(self.add_zoom, 10),
-                         'Ctrl++', 'zoom-in', get_str('zoominDetail'), enabled=False)
-        zoom_out = action(get_str('zoomout'), partial(self.add_zoom, -10),
-                          'Ctrl+-', 'zoom-out', get_str('zoomoutDetail'), enabled=False)
-        zoom_org = action(get_str('originalsize'), partial(self.set_zoom, 100),
-                          'Ctrl+=', 'zoom', get_str('originalsizeDetail'), enabled=False)
-        fit_window = action(get_str('fitWin'), self.set_fit_window,
-                            'Ctrl+F', 'fit-window', get_str('fitWinDetail'),
+        zoom_in = action(self.get_str('zoomin'), partial(self.add_zoom, 10),
+                         'Ctrl++', 'zoom-in', self.get_str('zoominDetail'), enabled=False)
+        zoom_out = action(self.get_str('zoomout'), partial(self.add_zoom, -10),
+                          'Ctrl+-', 'zoom-out', self.get_str('zoomoutDetail'), enabled=False)
+        zoom_org = action(self.get_str('originalsize'), partial(self.set_zoom, 100),
+                          'Ctrl+=', 'zoom', self.get_str('originalsizeDetail'), enabled=False)
+        fit_window = action(self.get_str('fitWin'), self.set_fit_window,
+                            'Ctrl+F', 'fit-window', self.get_str('fitWinDetail'),
                             checkable=True, enabled=False)
-        fit_width = action(get_str('fitWidth'), self.set_fit_width,
-                           'Ctrl+Shift+F', 'fit-width', get_str('fitWidthDetail'),
+        fit_width = action(self.get_str('fitWidth'), self.set_fit_width,
+                           'Ctrl+Shift+F', 'fit-width', self.get_str('fitWidthDetail'),
                            checkable=True, enabled=False)
         # Group zoom controls into a list for easier toggling.
         zoom_actions = (self.zoom_widget, zoom_in, zoom_out,
@@ -499,32 +498,32 @@ class MainWindow(QMainWindow, WindowMixin):
                                              format_shortcut("Ctrl+Shift+Wheel")))
         self.light_widget.setEnabled(False)
 
-        light_brighten = action(get_str('lightbrighten'), partial(self.add_light, 10),
-                                'Ctrl+Shift++', 'light_lighten', get_str('lightbrightenDetail'), enabled=False)
-        light_darken = action(get_str('lightdarken'), partial(self.add_light, -10),
-                              'Ctrl+Shift+-', 'light_darken', get_str('lightdarkenDetail'), enabled=False)
-        light_org = action(get_str('lightreset'), partial(self.set_light, 50),
-                           'Ctrl+Shift+=', 'light_reset', get_str('lightresetDetail'), checkable=True, enabled=False)
+        light_brighten = action(self.get_str('lightbrighten'), partial(self.add_light, 10),
+                                'Ctrl+Shift++', 'light_lighten', self.get_str('lightbrightenDetail'), enabled=False)
+        light_darken = action(self.get_str('lightdarken'), partial(self.add_light, -10),
+                              'Ctrl+Shift+-', 'light_darken', self.get_str('lightdarkenDetail'), enabled=False)
+        light_org = action(self.get_str('lightreset'), partial(self.set_light, 50),
+                           'Ctrl+Shift+=', 'light_reset', self.get_str('lightresetDetail'), checkable=True, enabled=False)
         light_org.setChecked(True)
 
         # Group light controls into a list for easier toggling.
         light_actions = (self.light_widget, light_brighten,
                          light_darken, light_org)
 
-        edit = action(get_str('editLabel'), self.edit_label,
-                      'Ctrl+E', 'edit', get_str('editLabelDetail'),
+        edit = action(self.get_str('editLabel'), self.edit_label,
+                      'Ctrl+E', 'edit', self.get_str('editLabelDetail'),
                       enabled=False)
         self.edit_button.setDefaultAction(edit)
 
-        shape_line_color = action(get_str('shapeLineColor'), self.choose_shape_line_color,
-                                  icon='color_line', tip=get_str('shapeLineColorDetail'),
+        shape_line_color = action(self.get_str('shapeLineColor'), self.choose_shape_line_color,
+                                  icon='color_line', tip=self.get_str('shapeLineColorDetail'),
                                   enabled=False)
-        shape_fill_color = action(get_str('shapeFillColor'), self.choose_shape_fill_color,
-                                  icon='color', tip=get_str('shapeFillColorDetail'),
+        shape_fill_color = action(self.get_str('shapeFillColor'), self.choose_shape_fill_color,
+                                  icon='color', tip=self.get_str('shapeFillColorDetail'),
                                   enabled=False)
 
         labels = self.dock.toggleViewAction()
-        labels.setText(get_str('showHide'))
+        labels.setText(self.get_str('showHide'))
         labels.setShortcut('Ctrl+Shift+L')
 
         # Label list context menu.
@@ -535,7 +534,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.pop_label_list_menu)
 
         # Draw squares/rectangles
-        self.draw_squares_option = QAction(get_str('drawSquares'), self)
+        self.draw_squares_option = QAction(self.get_str('drawSquares'), self)
         self.draw_squares_option.setShortcut('Ctrl+Shift+R')
         self.draw_squares_option.setCheckable(True)
         self.draw_squares_option.setChecked(settings.get(SETTING_DRAW_SQUARE, False))
@@ -574,28 +573,28 @@ class MainWindow(QMainWindow, WindowMixin):
                               newProject=new_project, openProject=open_project, editProject=edit_project, saveProject=save_project, closeProject=close_project)
 
         self.menus = Struct(
-            file=self.menu(get_str('menu_file')),
-            edit=self.menu(get_str('menu_edit')),
-            view=self.menu(get_str('menu_view')),
-            output=self.menu(get_str('menu_output')),
-            language=self.menu(get_str('menu_lang')),
-            help=self.menu(get_str('menu_help')),
-            recentFiles=QMenu(get_str('menu_openRecent')),
-            recentProjects=QMenu(get_str('menu_recentProjects')),  # Recent projects menu
+            file=self.menu(self.get_str('menu_file')),
+            edit=self.menu(self.get_str('menu_edit')),
+            view=self.menu(self.get_str('menu_view')),
+            output=self.menu(self.get_str('menu_output')),
+            language=self.menu(self.get_str('menu_lang')),
+            help=self.menu(self.get_str('menu_help')),
+            recentFiles=QMenu(self.get_str('menu_openRecent')),
+            recentProjects=QMenu(self.get_str('menu_recentProjects')),  # Recent projects menu
             labelList=label_menu)
 
         # Auto saving : Enable auto saving if pressing next
-        self.auto_saving = QAction(get_str('autoSaveMode'), self)
+        self.auto_saving = QAction(self.get_str('autoSaveMode'), self)
         self.auto_saving.setCheckable(True)
         self.auto_saving.setChecked(settings.get(SETTING_AUTO_SAVE, False))
         # Sync single class mode from PR#106
-        self.single_class_mode = QAction(get_str('singleClsMode'), self)
+        self.single_class_mode = QAction(self.get_str('singleClsMode'), self)
         self.single_class_mode.setShortcut("Ctrl+Shift+S")
         self.single_class_mode.setCheckable(True)
         self.single_class_mode.setChecked(settings.get(SETTING_SINGLE_CLASS, False))
         self.lastLabel = None
         # Add option to enable/disable labels being displayed at the top of bounding boxes
-        self.display_label_option = QAction(get_str('displayLabel'), self)
+        self.display_label_option = QAction(self.get_str('displayLabel'), self)
         self.display_label_option.setShortcut("Ctrl+Shift+P")
         self.display_label_option.setCheckable(True)
         self.display_label_option.setChecked(settings.get(SETTING_PAINT_LABEL, False))
@@ -605,32 +604,32 @@ class MainWindow(QMainWindow, WindowMixin):
         lang_action_group = QActionGroup(self)
         lang_action_group.setExclusive(True)
 
-        self.lang_en = QAction(get_str('langEnglish'), self)
+        self.lang_en = QAction(self.get_str('langEnglish'), self)
         self.lang_en.setCheckable(True)
         self.lang_en.setActionGroup(lang_action_group)
         self.lang_en.triggered.connect(lambda: self.change_language('en'))
 
-        self.lang_zh_cn = QAction(get_str('langSimplifiedChinese'), self)
+        self.lang_zh_cn = QAction(self.get_str('langSimplifiedChinese'), self)
         self.lang_zh_cn.setCheckable(True)
         self.lang_zh_cn.setActionGroup(lang_action_group)
         self.lang_zh_cn.triggered.connect(lambda: self.change_language('zh-CN'))
 
-        self.lang_zh_tw = QAction(get_str('langTraditionalChinese'), self)
+        self.lang_zh_tw = QAction(self.get_str('langTraditionalChinese'), self)
         self.lang_zh_tw.setCheckable(True)
         self.lang_zh_tw.setActionGroup(lang_action_group)
         self.lang_zh_tw.triggered.connect(lambda: self.change_language('zh-TW'))
 
-        self.lang_ja = QAction(get_str('langJapanese'), self)
+        self.lang_ja = QAction(self.get_str('langJapanese'), self)
         self.lang_ja.setCheckable(True)
         self.lang_ja.setActionGroup(lang_action_group)
         self.lang_ja.triggered.connect(lambda: self.change_language('ja-JP'))
 
-        self.lang_de = QAction(get_str('langGerman'), self)
+        self.lang_de = QAction(self.get_str('langGerman'), self)
         self.lang_de.setCheckable(True)
         self.lang_de.setActionGroup(lang_action_group)
         self.lang_de.triggered.connect(lambda: self.change_language('de-DE'))
 
-        self.lang_fr = QAction(get_str('langFrench'), self)
+        self.lang_fr = QAction(self.get_str('langFrench'), self)
         self.lang_fr.setCheckable(True)
         self.lang_fr.setActionGroup(lang_action_group)
         self.lang_fr.triggered.connect(lambda: self.change_language('fr-FR'))
@@ -666,15 +665,15 @@ class MainWindow(QMainWindow, WindowMixin):
         # Custom context menu for the canvas widget:
         add_actions(self.canvas.menus[0], self.actions.beginnerContext)
         add_actions(self.canvas.menus[1], (
-            action(get_str('copyHere'), self.copy_shape),
-            action(get_str('moveHere'), self.move_shape)))
+            action(self.get_str('copyHere'), self.copy_shape),
+            action(self.get_str('moveHere'), self.move_shape)))
 
         # Create toolbar before building menus
         self.tools = self.toolbar('Tools')
         
         # Setup toolbar toggle action
         toolbar_toggle = self.tools.toggleViewAction()
-        toolbar_toggle.setText(get_str('toolbarToggleText'))
+        toolbar_toggle.setText(self.get_str('toolbarToggleText'))
         toolbar_toggle.setShortcut('Ctrl+T')
         
         add_actions(self.menus.language, (self.lang_en, self.lang_zh_cn, self.lang_zh_tw, self.lang_ja, self.lang_de, self.lang_fr))
@@ -785,6 +784,10 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.file_path and os.path.isdir(self.file_path):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
+    def get_str(self, str_id):
+        """Get translated string by ID"""
+        return self.string_bundle.get_string(str_id)
+
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
             self.canvas.set_drawing_shape_to_square(False)
@@ -843,7 +846,6 @@ class MainWindow(QMainWindow, WindowMixin):
             self.dock.setFeatures(self.dock.features() ^ self.dock_features)
 
     def populate_mode_actions(self):
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         if self.beginner():
             tool, menu = self.actions.beginner, self.actions.beginnerContext
@@ -901,7 +903,7 @@ class MainWindow(QMainWindow, WindowMixin):
         unified_layout.addWidget(line)
         
         # Add brightness slider with label
-        brightness_label = QLabel(get_str('lightWidgetTitle') + ':')
+        brightness_label = QLabel(self.get_str('lightWidgetTitle') + ':')
         brightness_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         unified_layout.addWidget(brightness_label)
         
@@ -909,7 +911,7 @@ class MainWindow(QMainWindow, WindowMixin):
         unified_layout.addWidget(light_widget_container)
         
         # Add zoom slider with label
-        zoom_label = QLabel(get_str('zoomin') + ':')
+        zoom_label = QLabel(self.get_str('zoomin') + ':')
         zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         unified_layout.addWidget(zoom_label)
         
@@ -982,10 +984,9 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def create_output_settings_widget(self):
         """Create the output settings dock widget with path input and format selection"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         # Create dock widget
-        dock = QDockWidget(get_str('outputDir'), self)
+        dock = QDockWidget(self.get_str('outputDir'), self)
         dock.setObjectName('outputSettings')
         
         # Main container
@@ -995,14 +996,14 @@ class MainWindow(QMainWindow, WindowMixin):
         main_layout.setSpacing(10)
         
         # Output directory section
-        dir_group = QGroupBox(get_str('outputDir'))
+        dir_group = QGroupBox(self.get_str('outputDir'))
         dir_layout = QVBoxLayout()
         dir_layout.setSpacing(5)
         
         # Directory input with browse button
         dir_input_layout = QHBoxLayout()
         self.output_dir_input = QLineEdit()
-        self.output_dir_input.setPlaceholderText(get_str('changeSaveDir'))
+        self.output_dir_input.setPlaceholderText(self.get_str('changeSaveDir'))
         self.output_dir_input.setText(self.default_save_dir or '')
         self.output_dir_input.setReadOnly(True)
         
@@ -1018,7 +1019,7 @@ class MainWindow(QMainWindow, WindowMixin):
         main_layout.addWidget(dir_group)
         
         # Output format section
-        format_group = QGroupBox(get_str('outputFormat'))
+        format_group = QGroupBox(self.get_str('outputFormat'))
         format_layout = QVBoxLayout()
         format_layout.setSpacing(5)
         
@@ -1172,11 +1173,10 @@ class MainWindow(QMainWindow, WindowMixin):
     def show_info_dialog(self):
         """Show information about the application"""
         from libs.__init__ import __version__
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         # Create a rich text dialog with project information
         dialog = QDialog(self)
-        dialog.setWindowTitle(get_str('aboutTitle'))
+        dialog.setWindowTitle(self.get_str('aboutTitle'))
         dialog.setMinimumSize(600, 500)
         
         # Main layout
@@ -1202,7 +1202,7 @@ class MainWindow(QMainWindow, WindowMixin):
         title_text = QVBoxLayout()
         app_name_label = QLabel('LabelCraft')
         app_name_label.setStyleSheet('font-size: 24px; font-weight: bold;')
-        version_label = QLabel(f'{get_str("aboutVersion")} {__version__}')
+        version_label = QLabel(f'{self.get_str("aboutVersion")} {__version__}')
         title_text.addWidget(app_name_label)
         title_text.addWidget(version_label)
         title_layout.addLayout(title_text)
@@ -1212,52 +1212,52 @@ class MainWindow(QMainWindow, WindowMixin):
         main_layout.addSpacing(20)
         
         # Description
-        desc_label = QLabel(get_str('aboutDescription'))
+        desc_label = QLabel(self.get_str('aboutDescription'))
         desc_label.setWordWrap(True)
         main_layout.addWidget(desc_label)
         main_layout.addSpacing(15)
         
         # Features section
-        features_title = QLabel(get_str('aboutFeatures'))
+        features_title = QLabel(self.get_str('aboutFeatures'))
         features_title.setStyleSheet('font-weight: bold;')
         main_layout.addWidget(features_title)
         
         features_text = QLabel(
-            f'{get_str("aboutFeatureMultiFormat")}<br>'
-            f'{get_str("aboutFeatureSmartAnnotation")}<br>'
-            f'{get_str("aboutFeatureProjectManagement")}<br>'
-            f'{get_str("aboutFeatureWorkflow")}<br>'
-            f'{get_str("aboutFeatureImageAdjustment")}<br>'
-            f'{get_str("aboutFeatureMultilingual")}'
+            f'{self.get_str("aboutFeatureMultiFormat")}<br>'
+            f'{self.get_str("aboutFeatureSmartAnnotation")}<br>'
+            f'{self.get_str("aboutFeatureProjectManagement")}<br>'
+            f'{self.get_str("aboutFeatureWorkflow")}<br>'
+            f'{self.get_str("aboutFeatureImageAdjustment")}<br>'
+            f'{self.get_str("aboutFeatureMultilingual")}'
         )
         features_text.setWordWrap(True)
         main_layout.addWidget(features_text)
         main_layout.addSpacing(15)
         
         # Technical info
-        tech_title = QLabel(get_str('aboutTechInfo'))
+        tech_title = QLabel(self.get_str('aboutTechInfo'))
         tech_title.setStyleSheet('font-weight: bold;')
         main_layout.addWidget(tech_title)
         
         tech_info = QLabel(
-            f'{get_str("aboutPythonVersion")}: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}<br>'
-            f'{get_str("aboutGUIFramework")}<br>'
-            f'{get_str("aboutDevLanguage")}<br>'
-            f'{get_str("aboutLicense")}'
+            f'{self.get_str("aboutPythonVersion")}: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}<br>'
+            f'{self.get_str("aboutGUIFramework")}<br>'
+            f'{self.get_str("aboutDevLanguage")}<br>'
+            f'{self.get_str("aboutLicense")}'
         )
         tech_info.setWordWrap(True)
         main_layout.addWidget(tech_info)
         main_layout.addSpacing(15)
         
         # Links section
-        links_title = QLabel(get_str('aboutLinks'))
+        links_title = QLabel(self.get_str('aboutLinks'))
         links_title.setStyleSheet('font-weight: bold;')
         main_layout.addWidget(links_title)
         
         links_text = QLabel(
-            f'• <a href="https://github.com/syd168/LabelCraft">{get_str("aboutGitHubHome")}</a><br>'
-            f'• <a href="https://github.com/syd168/LabelCraft/issues">{get_str("aboutIssueTracker")}</a><br>'
-            f'• <a href="https://github.com/syd168/LabelCraft/blob/master/README.md">{get_str("aboutDocumentation")}</a>'
+            f'• <a href="https://github.com/syd168/LabelCraft">{self.get_str("aboutGitHubHome")}</a><br>'
+            f'• <a href="https://github.com/syd168/LabelCraft/issues">{self.get_str("aboutIssueTracker")}</a><br>'
+            f'• <a href="https://github.com/syd168/LabelCraft/blob/master/README.md">{self.get_str("aboutDocumentation")}</a>'
         )
         links_text.setWordWrap(True)
         links_text.setOpenExternalLinks(True)
@@ -1275,7 +1275,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def show_shortcuts_dialog(self):
         """Show a dialog with all keyboard shortcuts"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
 
         # Define title style
         title_style = """
@@ -1289,7 +1288,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Create dialog
         dialog = QDialog(self)
-        dialog.setWindowTitle(get_str('shortcutTitle'))
+        dialog.setWindowTitle(self.get_str('shortcutTitle'))
         dialog.setMinimumSize(700, 600)
 
         # Create main layout
@@ -1312,63 +1311,63 @@ class MainWindow(QMainWindow, WindowMixin):
             return row
 
         # Section 1: File Operations
-        section1_title = QLabel(get_str('shortcutFileOps'))
+        section1_title = QLabel(self.get_str('shortcutFileOps'))
         section1_title.setStyleSheet(title_style)
         scroll_layout.addWidget(section1_title)
 
-        scroll_layout.addLayout(create_shortcut_row(get_str('openFile'), 'Ctrl+O'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('openDir'), 'Ctrl+U'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('save'), 'Ctrl+S'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('saveAs'), 'Ctrl+Shift+S'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('closeCur'), 'Ctrl+W'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('nextImg'), 'D'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('prevImg'), 'A'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('openFile'), 'Ctrl+O'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('openDir'), 'Ctrl+U'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('save'), 'Ctrl+S'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('saveAs'), 'Ctrl+Shift+S'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('closeCur'), 'Ctrl+W'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('nextImg'), 'D'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('prevImg'), 'A'))
 
         scroll_layout.addSpacing(15)
 
         # Section 2: Edit Operations
-        section2_title = QLabel(get_str('shortcutEditOps'))
+        section2_title = QLabel(self.get_str('shortcutEditOps'))
         scroll_layout.addWidget(section2_title)
 
-        scroll_layout.addLayout(create_shortcut_row(get_str('crtBox'), 'W'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('delBox'), 'Delete'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('dupBox'), 'Ctrl+D'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('editLabel'), 'Ctrl+E'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('editBox'), 'Ctrl+J'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('crtBox'), 'W'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('delBox'), 'Delete'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('dupBox'), 'Ctrl+D'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('editLabel'), 'Ctrl+E'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('editBox'), 'Ctrl+J'))
 
         scroll_layout.addSpacing(15)
 
         # Section 3: View Operations
-        section3_title = QLabel(get_str('shortcutViewOps'))
+        section3_title = QLabel(self.get_str('shortcutViewOps'))
         scroll_layout.addWidget(section3_title)
 
-        scroll_layout.addLayout(create_shortcut_row(get_str('zoomin'), 'Ctrl++'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('zoomout'), 'Ctrl+-'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('originalsize'), 'Ctrl+='))
-        scroll_layout.addLayout(create_shortcut_row(get_str('fitWin'), 'Ctrl+F'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('fitWidth'), 'Ctrl+Shift+F'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('zoomin'), 'Ctrl++'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('zoomout'), 'Ctrl+-'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('originalsize'), 'Ctrl+='))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('fitWin'), 'Ctrl+F'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('fitWidth'), 'Ctrl+Shift+F'))
 
         scroll_layout.addSpacing(15)
 
         # Section 4: Brightness
-        section4_title = QLabel(get_str('shortcutBrightness'))
+        section4_title = QLabel(self.get_str('shortcutBrightness'))
         scroll_layout.addWidget(section4_title)
 
-        scroll_layout.addLayout(create_shortcut_row(get_str('lightbrighten'), 'Ctrl+Shift++'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('lightdarken'), 'Ctrl+Shift+-'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('lightreset'), 'Ctrl+Shift+='))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('lightbrighten'), 'Ctrl+Shift++'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('lightdarken'), 'Ctrl+Shift+-'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('lightreset'), 'Ctrl+Shift+='))
 
         scroll_layout.addSpacing(15)
 
         # Section 5: Other
-        section5_title = QLabel(get_str('shortcutOther'))
+        section5_title = QLabel(self.get_str('shortcutOther'))
         scroll_layout.addWidget(section5_title)
 
-        scroll_layout.addLayout(create_shortcut_row(get_str('advancedMode'), 'Ctrl+Shift+A'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('hideAllBox'), 'Ctrl+H'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('showAllBox'), 'Ctrl+A'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('singleClsMode'), 'Ctrl+Shift+S'))
-        scroll_layout.addLayout(create_shortcut_row(get_str('displayLabel'), 'Ctrl+Shift+P'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('advancedMode'), 'Ctrl+Shift+A'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('hideAllBox'), 'Ctrl+H'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('showAllBox'), 'Ctrl+A'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('singleClsMode'), 'Ctrl+Shift+S'))
+        scroll_layout.addLayout(create_shortcut_row(self.get_str('displayLabel'), 'Ctrl+Shift+P'))
 
         scroll_layout.addStretch()
 
@@ -1387,67 +1386,66 @@ class MainWindow(QMainWindow, WindowMixin):
         """Change the application language"""
         # Reload string bundle with new locale
         self.string_bundle = StringBundle.get_bundle(locale)
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
 
         # Update menu titles
-        self.menus.file.setTitle(get_str('menu_file'))
-        self.menus.edit.setTitle(get_str('menu_edit'))
-        self.menus.view.setTitle(get_str('menu_view'))
-        self.menus.output.setTitle(get_str('menu_output'))
-        self.menus.language.setTitle(get_str('menu_lang'))
-        self.menus.help.setTitle(get_str('menu_help'))
-        self.menus.recentFiles.setTitle(get_str('menu_openRecent'))
-        self.menus.recentProjects.setTitle(get_str('menu_recentProjects'))
+        self.menus.file.setTitle(self.get_str('menu_file'))
+        self.menus.edit.setTitle(self.get_str('menu_edit'))
+        self.menus.view.setTitle(self.get_str('menu_view'))
+        self.menus.output.setTitle(self.get_str('menu_output'))
+        self.menus.language.setTitle(self.get_str('menu_lang'))
+        self.menus.help.setTitle(self.get_str('menu_help'))
+        self.menus.recentFiles.setTitle(self.get_str('menu_openRecent'))
+        self.menus.recentProjects.setTitle(self.get_str('menu_recentProjects'))
 
         # Update dock titles
-        self.dock.setWindowTitle(get_str('boxLabelText'))
+        self.dock.setWindowTitle(self.get_str('boxLabelText'))
         # Note: file_list is now part of the main dock, no separate file_dock
         if hasattr(self, 'output_settings_widget'):
-            self.output_settings_widget.setWindowTitle(get_str('outputDir'))
+            self.output_settings_widget.setWindowTitle(self.get_str('outputDir'))
 
         # Update checkbox text
-        self.use_default_label_checkbox.setText(get_str('useDefaultLabel'))
-        self.diffc_button.setText(get_str('useDifficult'))
+        self.use_default_label_checkbox.setText(self.get_str('useDefaultLabel'))
+        self.diffc_button.setText(self.get_str('useDifficult'))
 
         # Update actions text
-        self.auto_saving.setText(get_str('autoSaveMode'))
-        self.single_class_mode.setText(get_str('singleClsMode'))
-        self.display_label_option.setText(get_str('displayLabel'))
+        self.auto_saving.setText(self.get_str('autoSaveMode'))
+        self.single_class_mode.setText(self.get_str('singleClsMode'))
+        self.display_label_option.setText(self.get_str('displayLabel'))
         
         # Update export action
         if hasattr(self.actions, 'exportAnnotations'):
-            self.actions.exportAnnotations.setText(get_str('exportAnnotations'))
-            self.actions.exportAnnotations.setToolTip(get_str('exportAnnotationsDetail'))
+            self.actions.exportAnnotations.setText(self.get_str('exportAnnotations'))
+            self.actions.exportAnnotations.setToolTip(self.get_str('exportAnnotationsDetail'))
         
         # Update project management actions
         if hasattr(self.actions, 'newProject'):
-            self.actions.newProject.setText(get_str('newProject'))
-            self.actions.newProject.setToolTip(get_str('newProjectDetail'))
+            self.actions.newProject.setText(self.get_str('newProject'))
+            self.actions.newProject.setToolTip(self.get_str('newProjectDetail'))
         if hasattr(self.actions, 'openProject'):
-            self.actions.openProject.setText(get_str('openProject'))
-            self.actions.openProject.setToolTip(get_str('openProjectDetail'))
+            self.actions.openProject.setText(self.get_str('openProject'))
+            self.actions.openProject.setToolTip(self.get_str('openProjectDetail'))
         if hasattr(self.actions, 'editProject'):
-            self.actions.editProject.setText(get_str('editProject'))
-            self.actions.editProject.setToolTip(get_str('editProjectDetail'))
+            self.actions.editProject.setText(self.get_str('editProject'))
+            self.actions.editProject.setToolTip(self.get_str('editProjectDetail'))
         if hasattr(self.actions, 'saveProject'):
-            self.actions.saveProject.setText(get_str('saveProject'))
-            self.actions.saveProject.setToolTip(get_str('saveProjectDetail'))
+            self.actions.saveProject.setText(self.get_str('saveProject'))
+            self.actions.saveProject.setToolTip(self.get_str('saveProjectDetail'))
         if hasattr(self.actions, 'closeProject'):
-            self.actions.closeProject.setText(get_str('closeProject'))
-            self.actions.closeProject.setToolTip(get_str('closeProjectDetail'))
+            self.actions.closeProject.setText(self.get_str('closeProject'))
+            self.actions.closeProject.setToolTip(self.get_str('closeProjectDetail'))
         
         # Update right panel group boxes and widgets
         # Find all QGroupBox widgets in the dock and update their titles
         for widget in self.dock.findChildren(QGroupBox):
             title = widget.title()
             if title == '输出设置' or title == 'Output Settings':
-                widget.setTitle(get_str('outputSettings'))
+                widget.setTitle(self.get_str('outputSettings'))
             elif title == '标签过滤' or title == 'Label Filter':
-                widget.setTitle(get_str('labelFilter'))
+                widget.setTitle(self.get_str('labelFilter'))
             elif title == '标签列表' or title == 'Label List':
-                widget.setTitle(get_str('labelList'))
+                widget.setTitle(self.get_str('labelList'))
             elif title == '已完成标注' or title == 'Completed Annotations':
-                widget.setTitle(get_str('completedAnnotations'))
+                widget.setTitle(self.get_str('completedAnnotations'))
         
         # Update output path and format labels
         if hasattr(self, 'output_dir_label'):
@@ -1456,43 +1454,43 @@ class MainWindow(QMainWindow, WindowMixin):
             if parent_widget:
                 for child in parent_widget.findChildren(QLabel):
                     if child.text() == '输出路径：' or child.text() == 'Output Path:':
-                        child.setText(get_str('outputPath'))
+                        child.setText(self.get_str('outputPath'))
                     elif child.text() == '输出格式：' or child.text() == 'Output Format:':
-                        child.setText(get_str('outputFormat'))
+                        child.setText(self.get_str('outputFormat'))
         
         # Update zoom and light widget tooltips
         if hasattr(self, 'zoom_widget'):
-            self.zoom_widget.update_tooltip(get_str('zoomin'))
+            self.zoom_widget.update_tooltip(self.get_str('zoomin'))
         if hasattr(self, 'light_widget'):
-            self.light_widget.update_tooltip(get_str('lightWidgetTitle'))
+            self.light_widget.update_tooltip(self.get_str('lightWidgetTitle'))
         
         # Update pending queue buttons
         if hasattr(self, 'pending_list_widget'):
             for btn in self.pending_list_widget.parentWidget().findChildren(QPushButton):
                 text = btn.text()
                 if text == '+ 添加图像' or text == '+ Add Images':
-                    btn.setText(get_str('addImages'))
+                    btn.setText(self.get_str('addImages'))
                 elif text == '+ 添加文件夹' or text == '+ Add Folder':
-                    btn.setText(get_str('addFolder'))
+                    btn.setText(self.get_str('addFolder'))
                 elif text == '清空' or text == 'Clear':
-                    btn.setText(get_str('clearPending'))
+                    btn.setText(self.get_str('clearPending'))
 
         # Update toolbar actions tooltips and text
         if hasattr(self.actions, 'open'):
-            self.actions.open.setText(get_str('openFile'))
-            self.actions.open.setToolTip(get_str('openFileDetail'))
+            self.actions.open.setText(self.get_str('openFile'))
+            self.actions.open.setToolTip(self.get_str('openFileDetail'))
         if hasattr(self.actions, 'openDir'):
-            self.actions.openDir.setText(get_str('openDir'))
+            self.actions.openDir.setText(self.get_str('openDir'))
         if hasattr(self.actions, 'changeSaveDir'):
-            self.actions.changeSaveDir.setText(get_str('changeSaveDir'))
+            self.actions.changeSaveDir.setText(self.get_str('changeSaveDir'))
         if hasattr(self.actions, 'openAnnotation'):
-            self.actions.openAnnotation.setText(get_str('openAnnotation'))
-            self.actions.openAnnotation.setToolTip(get_str('openAnnotationDetail'))
+            self.actions.openAnnotation.setText(self.get_str('openAnnotation'))
+            self.actions.openAnnotation.setToolTip(self.get_str('openAnnotationDetail'))
         if hasattr(self.actions, 'copyPrevBounding'):
-            self.actions.copyPrevBounding.setText(get_str('copyPrevBounding'))
+            self.actions.copyPrevBounding.setText(self.get_str('copyPrevBounding'))
         if hasattr(self.actions, 'save'):
-            self.actions.save.setText(get_str('save'))
-            self.actions.save.setToolTip(get_str('saveDetail'))
+            self.actions.save.setText(self.get_str('save'))
+            self.actions.save.setToolTip(self.get_str('saveDetail'))
         if hasattr(self.actions, 'save_format'):
             # Update save format based on current format
             if self.label_file_format == LabelFileFormat.PASCAL_VOC:
@@ -1501,118 +1499,118 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.actions.save_format.setText('&YOLO')
             elif self.label_file_format == LabelFileFormat.CREATE_ML:
                 self.actions.save_format.setText('&CreateML')
-            self.actions.save_format.setToolTip(get_str('changeSaveFormat'))
+            self.actions.save_format.setToolTip(self.get_str('changeSaveFormat'))
         if hasattr(self.actions, 'close'):
-            self.actions.close.setText(get_str('closeCur'))
-            self.actions.close.setToolTip(get_str('closeCurDetail'))
+            self.actions.close.setText(self.get_str('closeCur'))
+            self.actions.close.setToolTip(self.get_str('closeCurDetail'))
         if hasattr(self.actions, 'quit'):
-            self.actions.quit.setText(get_str('quit'))
-            self.actions.quit.setToolTip(get_str('quitApp'))
+            self.actions.quit.setText(self.get_str('quit'))
+            self.actions.quit.setToolTip(self.get_str('quitApp'))
         if hasattr(self.actions, 'create'):
-            self.actions.create.setText(get_str('crtBox'))
-            self.actions.create.setToolTip(get_str('crtBoxDetail'))
+            self.actions.create.setText(self.get_str('crtBox'))
+            self.actions.create.setToolTip(self.get_str('crtBoxDetail'))
         if hasattr(self.actions, 'delete'):
-            self.actions.delete.setText(get_str('delBox'))
-            self.actions.delete.setToolTip(get_str('delBoxDetail'))
+            self.actions.delete.setText(self.get_str('delBox'))
+            self.actions.delete.setToolTip(self.get_str('delBoxDetail'))
         if hasattr(self.actions, 'copy'):
-            self.actions.copy.setText(get_str('dupBox'))
-            self.actions.copy.setToolTip(get_str('dupBoxDetail'))
+            self.actions.copy.setText(self.get_str('dupBox'))
+            self.actions.copy.setToolTip(self.get_str('dupBoxDetail'))
         if hasattr(self.actions, 'edit'):
-            self.actions.edit.setText(get_str('editLabel'))
-            self.actions.edit.setToolTip(get_str('editLabelDetail'))
+            self.actions.edit.setText(self.get_str('editLabel'))
+            self.actions.edit.setToolTip(self.get_str('editLabelDetail'))
         if hasattr(self.actions, 'createMode'):
-            self.actions.createMode.setText(get_str('crtBox'))
-            self.actions.createMode.setToolTip(get_str('crtBoxDetail'))
+            self.actions.createMode.setText(self.get_str('crtBox'))
+            self.actions.createMode.setToolTip(self.get_str('crtBoxDetail'))
         if hasattr(self.actions, 'editMode'):
-            self.actions.editMode.setText(get_str('editBox'))
-            self.actions.editMode.setToolTip(get_str('editBoxDetail'))
+            self.actions.editMode.setText(self.get_str('editBox'))
+            self.actions.editMode.setToolTip(self.get_str('editBoxDetail'))
         if hasattr(self.actions, 'shapeLineColor'):
-            self.actions.shapeLineColor.setText(get_str('shapeLineColor'))
-            self.actions.shapeLineColor.setToolTip(get_str('shapeLineColorDetail'))
+            self.actions.shapeLineColor.setText(self.get_str('shapeLineColor'))
+            self.actions.shapeLineColor.setToolTip(self.get_str('shapeLineColorDetail'))
         if hasattr(self.actions, 'shapeFillColor'):
-            self.actions.shapeFillColor.setText(get_str('shapeFillColor'))
-            self.actions.shapeFillColor.setToolTip(get_str('shapeFillColorDetail'))
+            self.actions.shapeFillColor.setText(self.get_str('shapeFillColor'))
+            self.actions.shapeFillColor.setToolTip(self.get_str('shapeFillColorDetail'))
         if hasattr(self.actions, 'lineColor'):
-            self.actions.lineColor.setText(get_str('boxLineColor'))
-            self.actions.lineColor.setToolTip(get_str('boxLineColorDetail'))
+            self.actions.lineColor.setText(self.get_str('boxLineColor'))
+            self.actions.lineColor.setToolTip(self.get_str('boxLineColorDetail'))
         if hasattr(self.actions, 'drawSquares'):
-            self.actions.drawSquares.setText(get_str('drawSquares'))
+            self.actions.drawSquares.setText(self.get_str('drawSquares'))
 
         # Update zoom actions
         if hasattr(self.actions, 'zoomIn'):
-            self.actions.zoomIn.setText(get_str('zoomin'))
-            self.actions.zoomIn.setToolTip(get_str('zoominDetail'))
+            self.actions.zoomIn.setText(self.get_str('zoomin'))
+            self.actions.zoomIn.setToolTip(self.get_str('zoominDetail'))
         if hasattr(self.actions, 'zoomOut'):
-            self.actions.zoomOut.setText(get_str('zoomout'))
-            self.actions.zoomOut.setToolTip(get_str('zoomoutDetail'))
+            self.actions.zoomOut.setText(self.get_str('zoomout'))
+            self.actions.zoomOut.setToolTip(self.get_str('zoomoutDetail'))
         if hasattr(self.actions, 'zoomOrg'):
-            self.actions.zoomOrg.setText(get_str('originalsize'))
-            self.actions.zoomOrg.setToolTip(get_str('originalsizeDetail'))
+            self.actions.zoomOrg.setText(self.get_str('originalsize'))
+            self.actions.zoomOrg.setToolTip(self.get_str('originalsizeDetail'))
         if hasattr(self.actions, 'fitWindow'):
-            self.actions.fitWindow.setText(get_str('fitWin'))
-            self.actions.fitWindow.setToolTip(get_str('fitWinDetail'))
+            self.actions.fitWindow.setText(self.get_str('fitWin'))
+            self.actions.fitWindow.setToolTip(self.get_str('fitWinDetail'))
         if hasattr(self.actions, 'fitWidth'):
-            self.actions.fitWidth.setText(get_str('fitWidth'))
-            self.actions.fitWidth.setToolTip(get_str('fitWidthDetail'))
+            self.actions.fitWidth.setText(self.get_str('fitWidth'))
+            self.actions.fitWidth.setToolTip(self.get_str('fitWidthDetail'))
 
         # Update light actions
         if hasattr(self.actions, 'lightBrighten'):
-            self.actions.lightBrighten.setText(get_str('lightbrighten'))
-            self.actions.lightBrighten.setToolTip(get_str('lightbrightenDetail'))
+            self.actions.lightBrighten.setText(self.get_str('lightbrighten'))
+            self.actions.lightBrighten.setToolTip(self.get_str('lightbrightenDetail'))
         if hasattr(self.actions, 'lightDarken'):
-            self.actions.lightDarken.setText(get_str('lightdarken'))
-            self.actions.lightDarken.setToolTip(get_str('lightdarkenDetail'))
+            self.actions.lightDarken.setText(self.get_str('lightdarken'))
+            self.actions.lightDarken.setToolTip(self.get_str('lightdarkenDetail'))
         if hasattr(self.actions, 'lightOrg'):
-            self.actions.lightOrg.setText(get_str('lightreset'))
-            self.actions.lightOrg.setToolTip(get_str('lightresetDetail'))
+            self.actions.lightOrg.setText(self.get_str('lightreset'))
+            self.actions.lightOrg.setToolTip(self.get_str('lightresetDetail'))
 
         # Update other actions
         if hasattr(self.actions, 'verify'):
-            self.actions.verify.setText(get_str('verifyImg'))
-            self.actions.verify.setToolTip(get_str('verifyImgDetail'))
+            self.actions.verify.setText(self.get_str('verifyImg'))
+            self.actions.verify.setToolTip(self.get_str('verifyImgDetail'))
         if hasattr(self.actions, 'nextImg'):
-            self.actions.nextImg.setText(get_str('nextImg'))
-            self.actions.nextImg.setToolTip(get_str('nextImgDetail'))
+            self.actions.nextImg.setText(self.get_str('nextImg'))
+            self.actions.nextImg.setToolTip(self.get_str('nextImgDetail'))
         if hasattr(self.actions, 'prevImg'):
-            self.actions.prevImg.setText(get_str('prevImg'))
-            self.actions.prevImg.setToolTip(get_str('prevImgDetail'))
+            self.actions.prevImg.setText(self.get_str('prevImg'))
+            self.actions.prevImg.setToolTip(self.get_str('prevImgDetail'))
         if hasattr(self.actions, 'hideAll'):
-            self.actions.hideAll.setText(get_str('hideAllBox'))
-            self.actions.hideAll.setToolTip(get_str('hideAllBoxDetail'))
+            self.actions.hideAll.setText(self.get_str('hideAllBox'))
+            self.actions.hideAll.setToolTip(self.get_str('hideAllBoxDetail'))
         if hasattr(self.actions, 'showAll'):
-            self.actions.showAll.setText(get_str('showAllBox'))
-            self.actions.showAll.setToolTip(get_str('showAllBoxDetail'))
+            self.actions.showAll.setText(self.get_str('showAllBox'))
+            self.actions.showAll.setToolTip(self.get_str('showAllBoxDetail'))
         if hasattr(self.actions, 'labels'):
-            self.actions.labels.setText(get_str('showHide'))
+            self.actions.labels.setText(self.get_str('showHide'))
         if hasattr(self.actions, 'saveAs'):
-            self.actions.saveAs.setText(get_str('saveAs'))
-            self.actions.saveAs.setToolTip(get_str('saveAsDetail'))
+            self.actions.saveAs.setText(self.get_str('saveAs'))
+            self.actions.saveAs.setToolTip(self.get_str('saveAsDetail'))
         if hasattr(self.actions, 'resetAll'):
-            self.actions.resetAll.setText(get_str('resetAll'))
-            self.actions.resetAll.setToolTip(get_str('resetAllDetail'))
+            self.actions.resetAll.setText(self.get_str('resetAll'))
+            self.actions.resetAll.setToolTip(self.get_str('resetAllDetail'))
         if hasattr(self.actions, 'deleteImg'):
-            self.actions.deleteImg.setText(get_str('deleteImg'))
-            self.actions.deleteImg.setToolTip(get_str('deleteImgDetail'))
+            self.actions.deleteImg.setText(self.get_str('deleteImg'))
+            self.actions.deleteImg.setToolTip(self.get_str('deleteImgDetail'))
         if hasattr(self.actions, 'advancedMode'):
-            self.actions.advancedMode.setText(get_str('advancedMode'))
-            self.actions.advancedMode.setToolTip(get_str('advancedModeDetail'))
+            self.actions.advancedMode.setText(self.get_str('advancedMode'))
+            self.actions.advancedMode.setToolTip(self.get_str('advancedModeDetail'))
 
         # Update help actions
         if hasattr(self, 'show_shortcut'):
-            self.show_shortcut.setText(get_str('shortcut'))
+            self.show_shortcut.setText(self.get_str('shortcut'))
         
         for action in self.menus.help.actions():
             if 'Tutorial' in action.text() or '教学' in action.text() or 'チュートリアル' in action.text():
-                action.setText(get_str('tutorialDefault'))
-                action.setToolTip(get_str('tutorialDetail'))
+                action.setText(self.get_str('tutorialDefault'))
+                action.setToolTip(self.get_str('tutorialDetail'))
             elif 'Information' in action.text() or '信息' in action.text() or '情報' in action.text():
-                action.setText(get_str('info'))
+                action.setText(self.get_str('info'))
 
         # Update labels widget (show/hide action)
         labels_action = None
         for action in self.menus.view.actions():
             if 'Show/Hide' in action.text() or '显示/隐藏' in action.text() or '表示/非表示' in action.text():
-                action.setText(get_str('showHide'))
+                action.setText(self.get_str('showHide'))
                 break
 
         # Update window title if file is loaded
@@ -1717,7 +1715,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 anno_dir = self.default_save_dir
         
         if not anno_dir or not os.path.exists(anno_dir):
-            QMessageBox.warning(self, get_str('errorTitle'), get_str('annoDirNotFound'))
+            QMessageBox.warning(self, self.get_str('errorTitle'), self.get_str('annoDirNotFound'))
             return
         
         # Find corresponding image file
@@ -1759,8 +1757,8 @@ class MainWindow(QMainWindow, WindowMixin):
         if not image_path:
             QMessageBox.warning(
                 self, 
-                get_str('warningTitle'), 
-                get_str('imageNotFound').format(base_name) + '\n\n'
+                self.get_str('warningTitle'), 
+                self.get_str('imageNotFound').format(base_name) + '\n\n'
                 '请在 images/ 目录或项目根目录中添加该图像。'
             )
             return
@@ -1790,7 +1788,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def add_images_to_pending(self):
         """Add individual images to pending queue"""
         if not self.current_project:
-            QMessageBox.warning(self, get_str('warningTitle'), get_str('pleaseCreateProject'))
+            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('pleaseCreateProject'))
             return
         
         formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
@@ -1798,7 +1796,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
-            get_str('addImages'),
+            self.get_str('addImages'),
             self.current_project.project_dir or '.',
             filters
         )
@@ -1816,14 +1814,13 @@ class MainWindow(QMainWindow, WindowMixin):
                 if not already_exists:
                     self.pending_list_widget.addItem(file_path)
             
-            QMessageBox.information(self, get_str('successTitle'), get_str('imagesAdded').format(len(file_paths)))
+            QMessageBox.information(self, self.get_str('successTitle'), self.get_str('imagesAdded').format(len(file_paths)))
     
     def add_folder_to_pending(self):
         """Add all images from a folder to pending queue"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         if not self.current_project:
-            QMessageBox.warning(self, get_str('warningTitle'), get_str('pleaseCreateProject'))
+            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('pleaseCreateProject'))
             return
         
         dir_path = QFileDialog.getExistingDirectory(
@@ -1852,26 +1849,25 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.pending_list_widget.addItem(image_path)
                 added_count += 1
         
-        QMessageBox.information(self, get_str('successTitle'), get_str('folderImagesAdded').format(added_count))
+        QMessageBox.information(self, self.get_str('successTitle'), self.get_str('folderImagesAdded').format(added_count))
     
     def clear_pending_queue(self):
         """Clear all items from pending queue"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         if self.pending_list_widget.count() == 0:
             return
         
         reply = QMessageBox.question(
             self,
-            get_str('confirmTitle'),
-            get_str('confirmClearPending'),
+            self.get_str('confirmTitle'),
+            self.get_str('confirmClearPending'),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if reply == QMessageBox.Yes:
             self.pending_list_widget.clear()
-            QMessageBox.information(self, get_str('successTitle'), get_str('pendingCleared'))
+            QMessageBox.information(self, self.get_str('successTitle'), self.get_str('pendingCleared'))
     
     def remove_from_pending_queue(self, image_path):
         """Remove an image from pending queue after annotation is saved"""
@@ -2442,20 +2438,19 @@ class MainWindow(QMainWindow, WindowMixin):
         """
         Format coordinates text for status bar with current language
         """
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         if width is not None and height is not None:
             # Full format with width, height, x, y
             return '%s: %d, %s: %d / %s: %d; %s: %d' % (
-                get_str('coordWidth'), width,
-                get_str('coordHeight'), height,
-                get_str('coordX'), x,
-                get_str('coordY'), y
+                self.get_str('coordWidth'), width,
+                self.get_str('coordHeight'), height,
+                self.get_str('coordX'), x,
+                self.get_str('coordY'), y
             )
         else:
             # Simple format with just x, y
             return '%s: %d; %s: %d' % (
-                get_str('coordX'), x,
-                get_str('coordY'), y
+                self.get_str('coordX'), x,
+                self.get_str('coordY'), y
             )
 
     def show_bounding_box_from_annotation_file(self, file_path):
@@ -2600,14 +2595,14 @@ class MainWindow(QMainWindow, WindowMixin):
         if has_existing_annotations and self.current_project:
             reply = QMessageBox.warning(
                 self,
-                '⚠️ 警告：修改输出路径',
-                '检测到当前输出目录下已有标注文件！\n\n'
-                f'当前目录：{old_anno_dir}\n\n'
-                '修改输出路径可能导致：\n'
-                '• 之前的标注文件留在原目录\n'
-                '• 新标注保存到新目录，造成文件分散\n'
-                '• 项目配置与实际文件位置不一致\n\n'
-                '请选择处理方式：',
+                self.get_str('warningChangeOutputPath'),
+                self.get_str('detectExistingAnnotations') + '\n\n' +
+                f'{self.get_str("currentDir")}{old_anno_dir}\n\n' +
+                self.get_str('changeOutputPathWarning') + '\n' +
+                '• ' + self.get_str('noOpenProjectWarning2') + '\n' +
+                '• ' + self.get_str('modifyOutputPathWarning').split('\n')[1] + '\n' +
+                '• ' + self.get_str('modifyOutputPathWarning').split('\n')[2] + '\n\n' +
+                self.get_str('migrateAnnotations'),
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
                 QMessageBox.Cancel
             )
@@ -2622,13 +2617,9 @@ class MainWindow(QMainWindow, WindowMixin):
         elif self.default_save_dir is not None and len(self.m_img_list) > 0:
             reply = QMessageBox.warning(
                 self,
-                '⚠️ 警告',
-                '修改输出路径可能导致以下问题：\n\n'
-                '• 之前保存的标注文件将留在原目录\n'
-                '• 新标注会保存到新目录，造成文件分散\n'
-                '• 可能导致训练数据混乱\n\n'
-                '建议：在开始标注前确定输出路径，中途不要修改。\n\n'
-                '是否继续修改？',
+                self.get_str('warningTitle2'),
+                self.get_str('modifyOutputPathWarning') + '\n\n' +
+                self.get_str('continueEditQuestion'),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
@@ -2642,7 +2633,7 @@ class MainWindow(QMainWindow, WindowMixin):
             path = '.'
 
         dir_path = ustr(QFileDialog.getExistingDirectory(self,
-                                                         '%s - 选择数据库目录（将创建 annotations 和 images 子目录）' % __appname__, path,
+                                                         '%s - %s' % (__appname__, self.get_str('selectDatabaseDirTitle')), path,
                                                          QFileDialog.ShowDirsOnly
                                                          | QFileDialog.DontResolveSymlinks))
 
@@ -2661,12 +2652,13 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.file_path:
             self.show_bounding_box_from_annotation_file(self.file_path)
 
-        self.statusBar().showMessage('%s . 标注和图像将保存到: %s' %
-                                     ('设置数据库目录', self.default_save_dir))
+        self.statusBar().showMessage('%s . %s%s' %
+                                     (self.get_str('setDatabaseDirStatus'), self.get_str('annotationsAndImagesWillSaveTo'), self.default_save_dir))
         self.statusBar().show()
 
     def _migrate_annotations(self, old_dir, new_dir=None):
         """Migrate annotation files from old directory to new directory (deprecated, use _migrate_and_convert_annotations)"""
+        
         if not old_dir or not os.path.exists(old_dir):
             return False
         
@@ -2674,7 +2666,7 @@ class MainWindow(QMainWindow, WindowMixin):
         if not new_dir:
             new_dir = ustr(QFileDialog.getExistingDirectory(
                 self,
-                '选择新的输出目录',
+                self.get_str('selectExportDirTitle'),
                 old_dir,
                 QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
             ))
@@ -2683,17 +2675,17 @@ class MainWindow(QMainWindow, WindowMixin):
                 return False
         
         if old_dir == new_dir:
-            QMessageBox.information(self, '提示', '新旧目录相同，无需迁移')
+            QMessageBox.information(self, self.get_str('infoTitle'), self.get_str('migrationNotNeeded'))
             return True
         
         # Ask user to choose copy or move
         reply = QMessageBox.question(
             self,
-            '🔄 选择迁移方式',
-            f'将标注文件从：\n{old_dir}\n\n迁移到：\n{new_dir}\n\n'
-            '请选择处理方式：\n\n'
-            '• 复制：保留原文件（推荐）\n'
-            '• 移动：删除原文件',
+            self.get_str('migrationModeTitle'),
+            f'{self.get_str("migrateFrom")}\n{old_dir}\n\n{self.get_str("migrateTo")}\n{new_dir}\n\n'
+            f'{self.get_str("chooseMigrationMode")}\n\n'
+            f'• {self.get_str("copyKeepOriginal")}\n'
+            f'• {self.get_str("moveDeleteOriginal")}',
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
@@ -2753,19 +2745,19 @@ class MainWindow(QMainWindow, WindowMixin):
                 
                 reply = QMessageBox.warning(
                     self,
-                    '⚠️ 警告：修改输出格式',
-                    f'检测到已有标注文件！\n\n'
-                    f'当前格式：{format_names.get(old_format, str(old_format))}\n'
-                    f'新格式：{format_names.get(new_format, str(new_format))}\n\n'
-                    '修改格式后：\n'
-                    '• 之前的标注文件格式不变\n'
-                    '• 新标注将使用新格式保存\n'
-                    '• 可能导致两种格式并存\n'
-                    '• 训练时需要统一格式\n\n'
-                    '建议：\n'
-                    '• 转换现有标注为新格式\n'
-                    '• 或重新开始标注\n\n'
-                    '是否继续修改？',
+                    self.get_str('warningChangeOutputFormat'),
+                    f'{self.get_str("detectExistingFiles")}\n\n' +
+                    f'{self.get_str("currentFormat")}{format_names.get(old_format, str(old_format))}\n' +
+                    f'{self.get_str("newFormat")}{format_names.get(new_format, str(new_format))}\n\n' +
+                    self.get_str('changeFormatWarning') + '\n' +
+                    '• ' + self.get_str('changeFormatWarning').split('\n')[1] + '\n' +
+                    '• ' + self.get_str('changeFormatWarning').split('\n')[2] + '\n' +
+                    '• ' + self.get_str('changeFormatWarning').split('\n')[3] + '\n' +
+                    '• ' + self.get_str('changeFormatWarning').split('\n')[4] + '\n\n' +
+                    self.get_str('recommendations') + '\n' +
+                    '• ' + self.get_str('recommendations').split('\n')[1] + '\n' +
+                    '• ' + self.get_str('recommendations').split('\n')[2] + '\n\n' +
+                    self.get_str('continueEditQuestion'),
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.No
                 )
@@ -2943,14 +2935,14 @@ class MainWindow(QMainWindow, WindowMixin):
             return
         
         if not self.m_img_list:
-            self.progress_label.setText(get_str('annotatedProgress').format(0, 0))
+            self.progress_label.setText(self.get_str('annotatedProgress').format(0, 0))
             self.next_unannotated_btn.setEnabled(False)
             return
         
         total = len(self.m_img_list)
         annotated = sum(1 for img_path in self.m_img_list if self._has_annotation(img_path))
         
-        self.progress_label.setText(get_str('annotatedProgress').format(annotated, total))
+        self.progress_label.setText(self.get_str('annotatedProgress').format(annotated, total))
         
         # Enable/disable next unannotated button
         has_unannotated = annotated < total
@@ -2980,13 +2972,13 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.load_file(filename)
                 QMessageBox.information(
                     self,
-                    get_str('tip'),
-                    get_str('jumpedToFirstUnannotated').format(total - sum(1 for img in self.m_img_list if self._has_annotation(img)))
+                    self.get_str('tip'),
+                    self.get_str('jumpedToFirstUnannotated').format(total - sum(1 for img in self.m_img_list if self._has_annotation(img)))
                 )
                 return
         
         # All images are annotated
-        QMessageBox.information(self, get_str('tip'), get_str('allImagesAnnotated'))
+        QMessageBox.information(self, self.get_str('tip'), self.get_str('allImagesAnnotated'))
 
     def verify_image(self, _value=False):
         # Proceeding next image without dialog if having any label
@@ -3011,10 +3003,10 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.dirty and not self.auto_saving.isChecked():
             reply = QMessageBox.question(
                 self,
-                get_str('unsaveChanges'),
-                get_str('currentImageHasUnsaved') + '\n\n' +
-                get_str('recommendAutoSave') + '\n\n' +
-                get_str('enableAutoSaveContinue'),
+                self.get_str('unsaveChanges'),
+                self.get_str('currentImageHasUnsaved') + '\n\n' +
+                self.get_str('recommendAutoSave') + '\n\n' +
+                self.get_str('enableAutoSaveContinue'),
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
                 QMessageBox.Yes
             )
@@ -3037,7 +3029,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self.cur_img_idx -= 1
             filename = self.m_img_list[self.cur_img_idx]
             if filename:
-                self.statusBar().showMessage(get_str('switchedToPrevious').format(os.path.basename(filename), self.cur_img_idx + 1, self.img_count))
+                self.statusBar().showMessage(self.get_str('switchedToPrevious').format(os.path.basename(filename), self.cur_img_idx + 1, self.img_count))
                 self.load_file(filename)
 
     def open_next_image(self, _value=False):
@@ -3045,10 +3037,10 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.dirty and not self.auto_saving.isChecked():
             reply = QMessageBox.question(
                 self,
-                get_str('unsaveChanges'),
-                get_str('currentImageHasUnsaved') + '\n\n' +
-                get_str('recommendAutoSave') + '\n\n' +
-                get_str('enableAutoSaveContinue'),
+                self.get_str('unsaveChanges'),
+                self.get_str('currentImageHasUnsaved') + '\n\n' +
+                self.get_str('recommendAutoSave') + '\n\n' +
+                self.get_str('enableAutoSaveContinue'),
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
                 QMessageBox.Yes
             )
@@ -3077,7 +3069,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 filename = self.m_img_list[self.cur_img_idx]
 
         if filename:
-            self.statusBar().showMessage(get_str('switchedToNext').format(os.path.basename(filename), self.cur_img_idx + 1, self.img_count))
+            self.statusBar().showMessage(self.get_str('switchedToNext').format(os.path.basename(filename), self.cur_img_idx + 1, self.img_count))
             self.load_file(filename)
 
     def open_file(self, _value=False):
@@ -3332,23 +3324,13 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def load_label_categories_file(self):
         """Load label categories from a text file (one label per line)"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         # Strong warning before loading new labels
         if len(self.label_hist) > 0 or len(self.m_img_list) > 0:
             reply = QMessageBox.critical(
                 self,
-                '⚠️ 严重警告',
-                '🚨 加载新标签类别会导致以下严重问题：\n\n'
-                '• 现有标注的标签可能与新标签不匹配\n'
-                '• 已标注的数据会出现标签错误\n'
-                '• 训练模型时将无法使用这些数据\n'
-                '• 需要重新标注所有已标注的图片\n\n'
-                '❗ 强烈建议：\n'
-                '  - 在开始标注前确定标签类别\n'
-                '  - 中途不要修改标签列表\n'
-                '  - 如需修改，请备份现有标注数据\n\n'
-                '您确定要继续吗？',
+                self.get_str('seriousWarningTitle'),
+                self.get_str('loadLabelsCriticalWarning'),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
@@ -3359,7 +3341,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # Open file dialog to select label categories file
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            '加载标签类别文件',
+            self.get_str('loadLabelsFileTitle'),
             self.last_open_dir or '.',
             'Text Files (*.txt);;All Files (*)'
         )
@@ -3370,7 +3352,7 @@ class MainWindow(QMainWindow, WindowMixin):
         file_path = ustr(file_path)
         
         if not os.path.exists(file_path):
-            QMessageBox.warning(self, '错误', f'文件不存在: {file_path}')
+            QMessageBox.warning(self, self.get_str('errorTitle'), self.get_str('fileNotExistError') + file_path)
             return
         
         try:
@@ -3383,7 +3365,7 @@ class MainWindow(QMainWindow, WindowMixin):
                         new_labels.append(line)
             
             if not new_labels:
-                QMessageBox.warning(self, '警告', '文件中没有找到有效的标签')
+                QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noValidLabelsFound2'))
                 return
             
             # Update label_hist with new labels (replace old ones)
@@ -3408,33 +3390,34 @@ class MainWindow(QMainWindow, WindowMixin):
             # Show warning about potential issues
             QMessageBox.warning(
                 self,
-                '⚠️ 注意',
-                f'已加载 {len(new_labels)} 个新标签类别。\n\n'
-                f'之前有 {old_count} 个标签，现在已替换为新标签。\n\n'
-                f'如果已有标注数据，请检查标签是否仍然正确！'
+                self.get_str('warningTitle'),
+                self.get_str('loadedNewLabelsMsg').format(len(new_labels)) + '\n\n'
+                f'{self.get_str("previousLabelsCount2").format(old_count)}\n\n'
+                f'{self.get_str("checkExistingAnnotations2")}'
             )
             
             print(f'Loaded {len(new_labels)} labels from: {file_path}')
             
         except Exception as e:
-            QMessageBox.critical(self, '错误', f'加载标签文件失败:\n{str(e)}')
+            QMessageBox.critical(self, self.get_str('errorTitle'), self.get_str('loadLabelFailedMessage2') + str(e))
     
     def edit_project_dialog(self):
         """Edit current project settings"""
+        
         if not self.current_project:
-            QMessageBox.warning(self, '警告', '没有打开的项目')
+            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noOpenProjectWarning3'))
             return
         
         # Show warning about editing project
         reply = QMessageBox.warning(
             self,
-            '⚠️ 编辑项目',
-            '编辑项目配置可能导致以下问题：\n\n'
-            '• 修改输出路径：需要迁移现有标注文件\n'
-            '• 修改输出格式：需要转换标注文件格式\n'
-            '• 修改标签列表：可能导致标签不匹配\n\n'
-            '建议在编辑前备份项目！\n\n'
-            '是否继续？',
+            self.get_str('editProjectWarningTitle'),
+            self.get_str('editProjectWarningMsg') + '\n\n' +
+            '• ' + self.get_str('editProjectWarningMsg').split('\n')[1] + '\n' +
+            '• ' + self.get_str('editProjectWarningMsg').split('\n')[2] + '\n' +
+            '• ' + self.get_str('editProjectWarningMsg').split('\n')[3] + '\n\n' +
+            self.get_str('backupRecommendation2') + '\n\n' +
+            self.get_str('continueEditQuestion'),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -3495,15 +3478,15 @@ class MainWindow(QMainWindow, WindowMixin):
             if (path_changed or format_changed) and has_annotations:
                 migrate_reply = QMessageBox.question(
                     self,
-                    '🔄 迁移标注文件',
-                    f'检测到配置变更：\n\n'
-                    f'{"• 输出路径: " + old_anno_dir + " → " + new_anno_dir if path_changed else ""}\n'
-                    f'{"• 输出格式: " + old_format + " → " + new_format if format_changed else ""}\n\n'
-                    f'发现 {len([f for f in os.listdir(old_anno_dir) if f.endswith(ext_map.get(old_format, ".xml"))])} 个标注文件\n\n'
-                    '请选择处理方式：\n\n'
-                    '• 复制：保留原文件，复制到新目录（推荐）\n'
-                    '• 移动：移动文件到新目录，删除原文件\n'
-                    '• 放弃：不迁移，在新目录重新开始',
+                    self.get_str('migrationDialogTitle'),
+                    f'{self.get_str("configChangeDetected2")}\n\n' +
+                    f'{"• " + self.get_str("outputPath") + ": " + old_anno_dir + " → " + new_anno_dir if path_changed else ""}\n' +
+                    f'{"• " + self.get_str("outputFormat") + ": " + old_format + " → " + new_format if format_changed else ""}\n\n' +
+                    f'{self.get_str("annotationFilesFound2").format(len([f for f in os.listdir(old_anno_dir) if f.endswith(ext_map.get(old_format, ".xml"))]))}\n\n' +
+                    f'{self.get_str("chooseAction3")}\n\n' +
+                    f'• {self.get_str("copyText")}：{self.get_str("copyKeepOriginal")}\n' +
+                    f'• {self.get_str("moveText")}：{self.get_str("moveDeleteOriginal")}\n' +
+                    f'• {self.get_str("skipMigration")}',
                     QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
                     QMessageBox.Yes
                 )
@@ -3544,12 +3527,12 @@ class MainWindow(QMainWindow, WindowMixin):
                 
                 QMessageBox.information(
                     self,
-                    '成功',
-                    f'项目 "{self.current_project.name}" 已更新！'
+                    self.get_str('successTitle'),
+                    self.get_str('projectUpdatedSuccess2').format(self.current_project.name)
                 )
                 
             except Exception as e:
-                QMessageBox.critical(self, '错误', f'更新项目失败:\n{str(e)}')
+                QMessageBox.critical(self, self.get_str('errorTitle'), self.get_str('updateProjectFailedMessage2') + str(e))
     
     def _migrate_and_convert_annotations(self, old_dir, new_dir, old_format, new_format, mode='copy'):
         """Migrate annotation files from old directory to new directory with format conversion
@@ -3561,6 +3544,7 @@ class MainWindow(QMainWindow, WindowMixin):
             new_format: Destination format
             mode: 'copy' (keep original) or 'move' (delete original)
         """
+        
         if not old_dir or not os.path.exists(old_dir):
             return False
         
@@ -3611,27 +3595,26 @@ class MainWindow(QMainWindow, WindowMixin):
             
             total = migrated_count + converted_count
             if total > 0:
-                mode_text = '复制' if mode == 'copy' else '移动'
-                msg = f'成功{mode_text} {total} 个标注文件\n\n'
+                mode_text = self.get_str('copyText') if mode == 'copy' else self.get_str('moveText')
+                msg = self.get_str('migrationSuccessMsg2').format(mode_text, total) + '\n\n'
                 if converted_count > 0:
-                    msg += f'其中 {converted_count} 个需要格式转换\n'
-                    msg += '⚠️ 注意：格式转换功能尚未完全实现\n'
-                    msg += '建议手动检查转换后的文件\n\n'
-                msg += f'从：{old_dir}\n到：{new_dir}\n\n'
+                    msg += self.get_str('convertedCount2').format(converted_count) + '\n'
+                    msg += self.get_str('manualCheckRecommended2') + '\n\n'
+                msg += f'{self.get_str("fromText")}{old_dir}\n{self.get_str("toText")}{new_dir}\n\n'
                 if mode == 'copy':
-                    msg += '✅ 原文件已保留作为备份。'
+                    msg += '✅ ' + self.get_str('originalFilesKept')
                 else:
-                    msg += '⚠️ 原文件已删除，请确认新目录文件正确！'
+                    msg += '⚠️ ' + self.get_str('originalFilesDeleted')
                 
-                QMessageBox.information(self, '迁移完成', msg)
+                QMessageBox.information(self, self.get_str('migrationComplete2'), msg)
                 print(f'{mode_text.capitalize()}d {total} annotation files from {old_dir} to {new_dir}')
             else:
-                QMessageBox.information(self, '提示', f'在 {old_dir} 中未找到标注文件')
+                QMessageBox.information(self, self.get_str('infoTitle'), self.get_str('noAnnotationsFound2').format(old_dir))
             
             return True
             
         except Exception as e:
-            QMessageBox.critical(self, '错误', f'迁移失败：\n{str(e)}')
+            QMessageBox.critical(self, self.get_str('errorTitle'), self.get_str('migrationFailedMessage2') + str(e))
             import traceback
             traceback.print_exc()
             return False
@@ -3686,21 +3669,22 @@ class MainWindow(QMainWindow, WindowMixin):
                 
                 QMessageBox.information(
                     self,
-                    '成功',
-                    f'项目 "{project.name}" 创建成功！\n\n'
-                    f'项目位置: {project_dir}\n'
-                    f'项目文件: {project_file}\n\n'
+                    self.get_str('successTitle'),
+                    self.get_str('projectCreatedSuccess2').format(project.name) + '\n\n'
+                    f'{self.get_str("projectLocation2")} {project_dir}\n'
+                    f'{self.get_str("projectFile2")} {project_file}\n\n'
                     f'{project.get_info_summary()}'
                 )
                 
             except Exception as e:
-                QMessageBox.critical(self, '错误', f'创建项目失败:\n{str(e)}')
+                QMessageBox.critical(self, self.get_str('errorTitle'), self.get_str('createProjectFailed2') + str(e))
     
     def open_project_dialog(self):
         """Open an existing project"""
+        
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            '打开项目',
+            self.get_str('openProjectTitle'),
             self.last_open_dir or '.',
             'LabelCraft Project (*.labelcraft);;All Files (*)'
         )
@@ -3715,14 +3699,14 @@ class MainWindow(QMainWindow, WindowMixin):
             
             QMessageBox.information(
                 self,
-                '成功',
-                f'项目 "{project.name}" 已加载\n\n{project.get_info_summary()}'
+                self.get_str('successTitle'),
+                self.get_str('projectLoaded').format(project.name) + '\n\n' + project.get_info_summary()
             )
             
         except FileNotFoundError:
-            QMessageBox.critical(self, '错误', f'项目文件不存在: {file_path}')
+            QMessageBox.critical(self, self.get_str('errorTitle'), self.get_str('projectFileNotExist').format(file_path))
         except Exception as e:
-            QMessageBox.critical(self, '错误', f'加载项目失败:\n{str(e)}')
+            QMessageBox.critical(self, self.get_str('errorTitle'), self.get_str('loadProjectFailed') + str(e))
     
     def load_project(self, project):
         """Load a project into the application"""
@@ -3832,7 +3816,15 @@ class MainWindow(QMainWindow, WindowMixin):
             return
         
         if reply == QMessageBox.Yes:
-            # Save project first
+            # Save current image annotation if there are unsaved changes
+            if self.dirty and self.file_path:
+                try:
+                    self.save_file()
+                    print(f'Current image annotation saved before closing project')
+                except Exception as e:
+                    print(f'Warning: Failed to save current image: {e}')
+            
+            # Save project configuration
             try:
                 self.current_project.labels = self.label_hist.copy()
                 self.current_project.annotation_dir = self.default_save_dir or ''
@@ -3850,6 +3842,7 @@ class MainWindow(QMainWindow, WindowMixin):
     
     def reset_to_initial_state(self):
         """Reset application to initial state (no project loaded)"""
+        
         # Clear current project
         self.current_project = None
         
@@ -3859,12 +3852,12 @@ class MainWindow(QMainWindow, WindowMixin):
         # Reset default save directory
         self.default_save_dir = None
         if hasattr(self, 'output_dir_label'):
-            self.output_dir_label.setText(get_str('notSet'))
+            self.output_dir_label.setText(self.get_str('notSet'))
         
         # Reset output format label
         self.label_file_format = LabelFileFormat.PASCAL_VOC
         if hasattr(self, 'output_format_label'):
-            self.output_format_label.setText(get_str('exportFormatVOC').split('(')[0].strip())
+            self.output_format_label.setText(self.get_str('exportFormatVOC').split('(')[0].strip())
         
         # Clear default label combo box
         self.default_label_combo_box.update_items([])
@@ -3917,7 +3910,6 @@ class MainWindow(QMainWindow, WindowMixin):
     
     def update_recent_projects_menu(self):
         """Update the recent projects menu with latest projects"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         self.menus.recentProjects.clear()
         
@@ -3925,7 +3917,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         if not recent_projects:
             # Show placeholder if no recent projects
-            empty_action = QAction(get_str('noRecentProjects'), self)
+            empty_action = QAction(self.get_str('noRecentProjects'), self)
             empty_action.setEnabled(False)
             self.menus.recentProjects.addAction(empty_action)
             return
@@ -3944,19 +3936,18 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Add separator and clear option
         self.menus.recentProjects.addSeparator()
-        clear_action = QAction(get_str('clearList'), self)
+        clear_action = QAction(self.get_str('clearList'), self)
         clear_action.triggered.connect(self.clear_recent_projects)
         self.menus.recentProjects.addAction(clear_action)
     
     def open_recent_project(self, project_path):
         """Open a project from recent projects list"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         if not os.path.exists(project_path):
             QMessageBox.warning(
                 self,
-                get_str('warningTitle'),
-                get_str('projectFileNotExist2') + f'\n{project_path}\n\n' + get_str('willRemoveFromList')
+                self.get_str('warningTitle'),
+                self.get_str('projectFileNotExist2') + f'\n{project_path}\n\n' + self.get_str('willRemoveFromList')
             )
             RecentProjectsManager.remove_project(project_path)
             return
@@ -3967,23 +3958,22 @@ class MainWindow(QMainWindow, WindowMixin):
             self.load_project(project)
             
         except Exception as e:
-            QMessageBox.critical(self, get_str('errorTitle'), get_str('loadProjectFailed2') + f'\n{str(e)}')
+            QMessageBox.critical(self, self.get_str('errorTitle'), self.get_str('loadProjectFailed2') + f'\n{str(e)}')
     
     def clear_recent_projects(self):
         """Clear all recent projects"""
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         reply = QMessageBox.question(
             self,
-            get_str('confirmTitle2'),
-            get_str('confirmClearRecentProjects'),
+            self.get_str('confirmTitle2'),
+            self.get_str('confirmClearRecentProjects'),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if reply == QMessageBox.Yes:
             RecentProjectsManager.save_recent_projects([])
-            QMessageBox.information(self, get_str('successTitle'), get_str('recentProjectsCleared'))
+            QMessageBox.information(self, self.get_str('successTitle'), self.get_str('recentProjectsCleared'))
 
     def load_pascal_xml_by_filename(self, xml_path):
         if self.file_path is None:
@@ -4046,7 +4036,6 @@ class MainWindow(QMainWindow, WindowMixin):
         - Annotation files in selected format
         - Does NOT include project files (.labelcraft)
         """
-        get_str = lambda str_id: self.string_bundle.get_string(str_id)
         
         # Check if there are any annotations to export
         # Determine annotation directory
@@ -4057,9 +4046,9 @@ class MainWindow(QMainWindow, WindowMixin):
             anno_dir = self.default_save_dir
         
         if not anno_dir or not os.path.exists(anno_dir):
-            QMessageBox.warning(self, get_str('warningTitle'), 
-                get_str('noSavedAnnotations') + '\n\n' +
-                get_str('pleaseAnnotateFirst'))
+            QMessageBox.warning(self, self.get_str('warningTitle'), 
+                self.get_str('noSavedAnnotations') + '\n\n' +
+                self.get_str('pleaseAnnotateFirst'))
             return
         
         # Scan for annotation files
@@ -4082,13 +4071,13 @@ class MainWindow(QMainWindow, WindowMixin):
         from PySide6.QtWidgets import QFileDialog, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox, QRadioButton, QCheckBox
         
         dialog = QDialog(self)
-        dialog.setWindowTitle(get_str('exportDialogTitle'))
+        dialog.setWindowTitle(self.get_str('exportDialogTitle'))
         dialog.setMinimumSize(500, 450)
         
         main_layout = QVBoxLayout()
         
         # Format selection group
-        format_group = QGroupBox(get_str('formatSelection'))
+        format_group = QGroupBox(self.get_str('formatSelection'))
         format_layout = QVBoxLayout()
         
         format_voc = QRadioButton('PASCAL VOC (XML)')
@@ -4120,14 +4109,14 @@ class MainWindow(QMainWindow, WindowMixin):
         main_layout.addWidget(format_group)
         
         # Options group
-        options_group = QGroupBox(get_str('exportOptions'))
+        options_group = QGroupBox(self.get_str('exportOptions'))
         options_layout = QVBoxLayout()
         
-        export_images_check = QCheckBox(get_str('exportImagesOption'))
+        export_images_check = QCheckBox(self.get_str('exportImagesOption'))
         export_images_check.setChecked(True)
         options_layout.addWidget(export_images_check)
         
-        only_annotated_check = QCheckBox(get_str('onlyAnnotatedOption'))
+        only_annotated_check = QCheckBox(self.get_str('onlyAnnotatedOption'))
         only_annotated_check.setChecked(True)
         options_layout.addWidget(only_annotated_check)
         
@@ -4136,19 +4125,19 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Info label
         info_label = QLabel(
-            get_str('exportInstructions') + '\n'
-            + get_str('willCreateDirs') + '\n'
-            + get_str('skipUnannotated') + '\n'
-            + get_str('noProjectFile') + '\n'
-            + get_str('supportConversion')
+            self.get_str('exportInstructions') + '\n'
+            + self.get_str('willCreateDirs') + '\n'
+            + self.get_str('skipUnannotated') + '\n'
+            + self.get_str('noProjectFile') + '\n'
+            + self.get_str('supportConversion')
         )
         info_label.setWordWrap(True)
         main_layout.addWidget(info_label)
         
         # Buttons
         button_layout = QHBoxLayout()
-        button_ok = QPushButton(get_str('startExport'))
-        button_cancel = QPushButton(get_str('cancel'))
+        button_ok = QPushButton(self.get_str('startExport'))
+        button_cancel = QPushButton(self.get_str('cancel'))
         button_layout.addStretch()
         button_layout.addWidget(button_ok)
         button_layout.addWidget(button_cancel)
@@ -4181,7 +4170,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # Open directory selection dialog
         export_dir = QFileDialog.getExistingDirectory(
             self,
-            get_str('selectExportDir'),
+            self.get_str('selectExportDir'),
             self.last_open_dir or '.',
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
@@ -4340,7 +4329,12 @@ class MainWindow(QMainWindow, WindowMixin):
                 try:
                     # Copy image if option is checked
                     if export_images_check.isChecked():
-                        shutil.copy2(img_path, os.path.join(dest_images_dir, img_name))
+                        dest_img_path = os.path.join(dest_images_dir, img_name)
+                        # Check if source and destination are the same file
+                        if os.path.abspath(img_path) != os.path.abspath(dest_img_path):
+                            shutil.copy2(img_path, dest_img_path)
+                        else:
+                            print(f"Skipping copy: source and destination are the same file")
                     
                     # Handle annotation conversion using the unified converter
                     dest_anno_path = os.path.join(dest_annotations_dir, dest_anno_file)
@@ -4371,22 +4365,22 @@ class MainWindow(QMainWindow, WindowMixin):
                     error_count += 1
             
             # Show result
-            result_msg = f'{get_str("exportComplete")}\n\n'
-            result_msg += f'{get_str("successfullyExported").format(exported_count)}\n'
+            result_msg = f'{self.get_str("exportComplete")}\n\n'
+            result_msg += f'{self.get_str("successfullyExported").format(exported_count)}\n'
             if skipped_count > 0:
-                result_msg += f'{get_str("skippedImageNotFound").format(skipped_count)}\n'
+                result_msg += f'{self.get_str("skippedImageNotFound").format(skipped_count)}\n'
             if error_count > 0:
-                result_msg += f'{get_str("errors").format(error_count)}\n'
-            result_msg += f'\n{get_str("exportFormat")}: {selected_format[0].name}\n'
-            result_msg += f'{get_str("exportLocation")}: {export_dir}'
+                result_msg += f'{self.get_str("errors").format(error_count)}\n'
+            result_msg += f'\n{self.get_str("exportFormat")}: {selected_format[0].name}\n'
+            result_msg += f'{self.get_str("exportLocation")}: {export_dir}'
             
-            QMessageBox.information(self, get_str('exportComplete'), result_msg)
+            QMessageBox.information(self, self.get_str('exportComplete'), result_msg)
             
             print(f"Export completed: {exported_count} files exported to {export_dir}")
             
         except Exception as e:
-            QMessageBox.critical(self, get_str('errorTitle'), 
-                f'{get_str("exportFailed")}\n\n{str(e)}')
+            QMessageBox.critical(self, self.get_str('errorTitle'), 
+                f'{self.get_str("exportFailed")}\n\n{str(e)}')
             import traceback
             traceback.print_exc()
 

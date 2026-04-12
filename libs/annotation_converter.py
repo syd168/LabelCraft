@@ -81,15 +81,39 @@ class AnnotationConverter:
     def read_yolo(txt_path, classes_file=None):
         """Read YOLO TXT format and convert to internal format"""
         # Find corresponding image file
-        base_name = os.path.splitext(txt_path)[0]
+        base_name = os.path.splitext(os.path.basename(txt_path))[0]
+        txt_dir = os.path.dirname(txt_path)
+        
+        # Try multiple locations for the image file
         image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff']
         image_path = None
         
+        # Strategy 1: Look in the same directory as the annotation file
         for ext in image_extensions:
-            candidate = base_name + ext
+            candidate = os.path.join(txt_dir, base_name + ext)
             if os.path.exists(candidate):
                 image_path = candidate
                 break
+        
+        # Strategy 2: Look in 'images' subdirectory of parent directory
+        if not image_path:
+            parent_dir = os.path.dirname(txt_dir)
+            images_dir = os.path.join(parent_dir, 'images')
+            if os.path.exists(images_dir):
+                for ext in image_extensions:
+                    candidate = os.path.join(images_dir, base_name + ext)
+                    if os.path.exists(candidate):
+                        image_path = candidate
+                        break
+        
+        # Strategy 3: Look in parent directory
+        if not image_path:
+            parent_dir = os.path.dirname(txt_dir)
+            for ext in image_extensions:
+                candidate = os.path.join(parent_dir, base_name + ext)
+                if os.path.exists(candidate):
+                    image_path = candidate
+                    break
         
         if not image_path:
             raise FileNotFoundError(f"Cannot find image file for {txt_path}")
@@ -242,15 +266,37 @@ class AnnotationConverter:
         import csv
         
         # Find corresponding image file
-        base_name = os.path.splitext(csv_path)[0]
+        base_name = os.path.splitext(os.path.basename(csv_path))[0]
+        csv_dir = os.path.dirname(csv_path)
         image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff']
         image_path = None
         
+        # Strategy 1: Look in the same directory as the annotation file
         for ext in image_extensions:
-            candidate = base_name + ext
+            candidate = os.path.join(csv_dir, base_name + ext)
             if os.path.exists(candidate):
                 image_path = candidate
                 break
+        
+        # Strategy 2: Look in 'images' subdirectory of parent directory
+        if not image_path:
+            parent_dir = os.path.dirname(csv_dir)
+            images_dir = os.path.join(parent_dir, 'images')
+            if os.path.exists(images_dir):
+                for ext in image_extensions:
+                    candidate = os.path.join(images_dir, base_name + ext)
+                    if os.path.exists(candidate):
+                        image_path = candidate
+                        break
+        
+        # Strategy 3: Look in parent directory
+        if not image_path:
+            parent_dir = os.path.dirname(csv_dir)
+            for ext in image_extensions:
+                candidate = os.path.join(parent_dir, base_name + ext)
+                if os.path.exists(candidate):
+                    image_path = candidate
+                    break
         
         if not image_path:
             raise FileNotFoundError(f"Cannot find image file for {csv_path}")

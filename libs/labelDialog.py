@@ -11,6 +11,13 @@ class LabelDialog(QDialog):
 
     def __init__(self, text="Enter object label", parent=None, list_item=None):
         super(LabelDialog, self).__init__(parent)
+        
+        # Load string bundle for i18n
+        self.string_bundle = None
+        if parent and hasattr(parent, 'string_bundle'):
+            self.string_bundle = parent.string_bundle
+        
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
 
         self.edit = QLineEdit()
         self.edit.setText(text)
@@ -56,6 +63,12 @@ class LabelDialog(QDialog):
         If the user entered a label, that label is returned, otherwise (i.e. if the user cancelled the action)
         `None` is returned.
         """
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+        
+        # Use default text from resources if empty
+        if not text:
+            text = get_str('labelDialogTitleDefault')
+        
         self.edit.setText(text)
         self.edit.setSelection(0, len(text))
         self.edit.setFocus(Qt.FocusReason.PopupFocusReason)

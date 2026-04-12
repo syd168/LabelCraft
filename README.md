@@ -41,9 +41,29 @@ LabelCraft is a modern graphical image annotation tool that supports annotating 
 - Python 3.8 or higher
 - pip package manager
 
-### One-Click Launch (Recommended)
+### Installation via pip (Recommended)
 
-We provide cross-platform automatic installation and launch scripts:
+The easiest way to install LabelCraft is via pip:
+
+```bash
+pip install labelcraft
+```
+
+After installation, you can launch it directly from the command line:
+
+```bash
+labelcraft
+```
+
+Or specify an image directory:
+
+```bash
+labelcraft /path/to/images
+```
+
+### One-Click Launch (From Source)
+
+If you prefer to run from source code, we provide cross-platform automatic installation and launch scripts:
 
 #### Linux/macOS
 ```bash

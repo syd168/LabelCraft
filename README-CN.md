@@ -41,9 +41,29 @@ LabelCraft 是一个现代化的图形化图像标注工具，支持在图像中
 - Python 3.8 或更高版本
 - pip 包管理器
 
-### 一键启动（推荐）
+### 通过 pip 安装（推荐）
 
-我们提供了跨平台的自动安装和启动脚本：
+最简单的安装 LabelCraft 的方式是通过 pip：
+
+```bash
+pip install labelcraft
+```
+
+安装完成后，可以直接从命令行启动：
+
+```bash
+labelcraft
+```
+
+或者指定图像目录：
+
+```bash
+labelcraft /path/to/images
+```
+
+### 一键启动（从源码）
+
+如果你更喜欢从源码运行，我们提供了跨平台的自动安装和启动脚本：
 
 #### Linux/macOS
 ```bash
@@ -62,42 +82,6 @@ start.bat
 3. 安装所有依赖
 4. 编译资源文件
 5. 启动 LabelCraft
-
-### 从 PyPI 安装（最简单）
-
-如果你只想使用 LabelCraft，不需要修改源码，可以直接从 PyPI 安装：
-
-```bash
-# 安装到当前 Python 环境
-pip install labelcraft
-
-# 或者安装到虚拟环境（推荐）
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate   # Windows
-pip install labelcraft
-```
-
-安装完成后，可以直接运行：
-```bash
-labelcraft  # 直接启动图形界面
-```
-
-或者指定图像路径：
-```bash
-labelcraft /path/to/image.jpg
-labelcraft /path/to/images/ /path/to/classes.txt /path/to/annotations/
-```
-
-**更新到最新版本：**
-```bash
-pip install --upgrade labelcraft
-```
-
-**卸载：**
-```bash
-pip uninstall labelcraft
-```
 
 ### 手动安装
 

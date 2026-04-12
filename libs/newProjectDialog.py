@@ -15,40 +15,51 @@ class NewProjectDialog(QDialog):
     def __init__(self, parent=None, edit_mode=False):
         super(NewProjectDialog, self).__init__(parent)
         self.edit_mode = edit_mode
+        self.parent_window = parent
+        
+        # Load string bundle for i18n
+        self.string_bundle = None
+        if parent and hasattr(parent, 'string_bundle'):
+            self.string_bundle = parent.string_bundle
+        
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+        
         if edit_mode:
-            self.setWindowTitle('编辑项目')
+            self.setWindowTitle(get_str('editProjectDialogTitle'))
         else:
-            self.setWindowTitle('新建标注项目')
+            self.setWindowTitle(get_str('newProjectDialogTitle'))
         self.setMinimumSize(600, 500)
         
         self.labels = []
         self.setup_ui()
         
     def setup_ui(self):
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+        
         main_layout = QVBoxLayout()
         main_layout.setSpacing(15)
         
         # Project Name
-        name_group = QGroupBox('项目信息')
+        name_group = QGroupBox(get_str('projectInfoGroup'))
         name_layout = QVBoxLayout()
         
         name_input_layout = QHBoxLayout()
-        name_label = QLabel('项目名称:')
+        name_label = QLabel(get_str('projectNameLabel'))
         name_label.setMinimumWidth(100)
         self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText('例如: 车辆检测项目')
+        self.name_input.setPlaceholderText(get_str('projectNamePlaceholder'))
         name_input_layout.addWidget(name_label)
         name_input_layout.addWidget(self.name_input)
         name_layout.addLayout(name_input_layout)
         
         # Project directory
         dir_input_layout = QHBoxLayout()
-        dir_label = QLabel('项目位置:')
+        dir_label = QLabel(get_str('projectDirLabel'))
         dir_label.setMinimumWidth(100)
         self.dir_input = QLineEdit()
-        self.dir_input.setPlaceholderText('选择数据库目录（将自动创建 annotations 和 images 子目录）')
+        self.dir_input.setPlaceholderText(get_str('projectDirPlaceholder'))
         self.dir_input.setReadOnly(True)
-        dir_browse_btn = QPushButton('...')
+        dir_browse_btn = QPushButton(get_str('browseButton'))
         dir_browse_btn.setMaximumWidth(40)
         dir_browse_btn.clicked.connect(self.browse_project_dir)
         dir_input_layout.addWidget(dir_label)
@@ -60,10 +71,10 @@ class NewProjectDialog(QDialog):
         main_layout.addWidget(name_group)
         
         # Labels
-        label_group = QGroupBox('标签类别')
+        label_group = QGroupBox(get_str('labelsGroup'))
         label_layout = QVBoxLayout()
         
-        label_info = QLabel('每行一个标签，例如: car, person, truck')
+        label_info = QLabel(get_str('labelInfoText'))
         label_info.setStyleSheet('color: #666; font-size: 11px;')
         label_layout.addWidget(label_info)
         
@@ -72,11 +83,11 @@ class NewProjectDialog(QDialog):
         label_layout.addWidget(self.label_list)
         
         label_btn_layout = QHBoxLayout()
-        add_label_btn = QPushButton('添加')
+        add_label_btn = QPushButton(get_str('addLabel'))
         add_label_btn.clicked.connect(self.add_label)
-        remove_label_btn = QPushButton('删除')
+        remove_label_btn = QPushButton(get_str('removeLabel'))
         remove_label_btn.clicked.connect(self.remove_label)
-        load_labels_btn = QPushButton('从文件加载...')
+        load_labels_btn = QPushButton(get_str('loadLabelsFromFile'))
         load_labels_btn.clicked.connect(self.load_labels_from_file)
         label_btn_layout.addWidget(add_label_btn)
         label_btn_layout.addWidget(remove_label_btn)
@@ -88,7 +99,7 @@ class NewProjectDialog(QDialog):
         main_layout.addWidget(label_group)
         
         # Format selection
-        format_group = QGroupBox('标注格式')
+        format_group = QGroupBox(get_str('formatGroup'))
         format_layout = QHBoxLayout()
         
         self.format_group = QButtonGroup()
@@ -113,11 +124,11 @@ class NewProjectDialog(QDialog):
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        cancel_btn = QPushButton('取消')
+        cancel_btn = QPushButton(get_str('cancelButton'))
         if self.edit_mode:
-            create_btn = QPushButton('保存项目')
+            create_btn = QPushButton(get_str('saveProjectButton'))
         else:
-            create_btn = QPushButton('创建项目')
+            create_btn = QPushButton(get_str('createProjectButton'))
         create_btn.setStyleSheet('font-weight: bold;')
         cancel_btn.clicked.connect(self.reject)
         create_btn.clicked.connect(self.accept_project)
@@ -130,8 +141,9 @@ class NewProjectDialog(QDialog):
     
     def browse_project_dir(self):
         """Browse for project directory"""
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
         dir_path = QFileDialog.getExistingDirectory(
-            self, '选择项目位置', '', 
+            self, get_str('selectProjectDirTitle'), '', 
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
         if dir_path:
@@ -140,14 +152,15 @@ class NewProjectDialog(QDialog):
     def add_label(self):
         """Add a label from input dialog"""
         from PySide6.QtWidgets import QInputDialog
-        label, ok = QInputDialog.getText(self, '添加标签', '标签名称:')
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+        label, ok = QInputDialog.getText(self, get_str('addLabelDialogTitle'), get_str('addLabelPrompt'))
         if ok and label.strip():
             label = label.strip()
             if label not in self.labels:
                 self.labels.append(label)
                 self.label_list.addItem(label)
             else:
-                QMessageBox.warning(self, '警告', f'标签 "{label}" 已存在')
+                QMessageBox.warning(self, get_str('warningTitle'), get_str('labelExistsWarning').format(label))
     
     def remove_label(self):
         """Remove selected label"""
@@ -159,8 +172,9 @@ class NewProjectDialog(QDialog):
     
     def load_labels_from_file(self):
         """Load labels from text file"""
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
         file_path, _ = QFileDialog.getOpenFileName(
-            self, '加载标签文件', '', 
+            self, get_str('loadLabelsFileTitle'), '', 
             'Text Files (*.txt);;All Files (*)'
         )
         
@@ -175,25 +189,27 @@ class NewProjectDialog(QDialog):
                         self.labels.append(label)
                         self.label_list.addItem(label)
             
-            QMessageBox.information(self, '成功', f'已加载 {len(self.labels)} 个标签')
+            QMessageBox.information(self, get_str('successTitle'), get_str('labelsLoadedSuccessfully2').format(len(self.labels)))
         except Exception as e:
-            QMessageBox.critical(self, '错误', f'加载失败: {str(e)}')
+            QMessageBox.critical(self, get_str('errorTitle'), get_str('loadLabelsFailedMessage') + str(e))
     
     def accept_project(self):
         """Validate and accept the project"""
+        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+        
         # Validate inputs
         if not self.name_input.text().strip():
-            QMessageBox.warning(self, '验证错误', '请输入项目名称')
+            QMessageBox.warning(self, get_str('validationErrorTitle'), get_str('enterProjectNameWarning'))
             return
         
         if not self.dir_input.text():
-            QMessageBox.warning(self, '验证错误', '请选择项目位置')
+            QMessageBox.warning(self, get_str('validationErrorTitle'), get_str('selectProjectDirWarning'))
             return
         
         if len(self.labels) == 0:
             reply = QMessageBox.question(
-                self, '确认', 
-                '未设置任何标签类别。\n您可以在标注过程中添加标签，但建议预先定义。\n\n是否继续？',
+                self, get_str('noLabelsConfirmTitle'), 
+                get_str('noLabelsWarning'),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
