@@ -1,17 +1,4 @@
 LabelCraft - Modern Image Annotation Tool
-==========================================
-
-.. image:: https://img.shields.io/pypi/v/labelcraft.svg
-   :target: https://pypi.org/project/LabelCraft/
-   :alt: PyPI Version
-
-.. image:: https://img.shields.io/pypi/pyversions/labelcraft.svg
-   :target: https://pypi.org/project/LabelCraft/
-   :alt: Python Versions
-
-.. image:: https://img.shields.io/github/license/syd168/LabelCraft.svg
-   :target: https://github.com/syd168/LabelCraft/blob/master/LICENSE
-   :alt: License
 
 **LabelCraft** is a powerful and user-friendly graphical image annotation tool, enhanced from the popular labelImg project. It provides an intuitive interface for creating bounding box annotations for object detection and machine learning tasks.
 
