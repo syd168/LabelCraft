@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# LabelCraft specific
+*.pickle
+*.pkl
+data/predefined_classes.txt
+
+# Build artifacts
+libs/resources.py
+
+# Logs
+*.log
+
+# Release notes (auto-generated)
+RELEASE_NOTES.md
+doc/TRANSLATION_GUIDE.md
+doc/打包说明.md
