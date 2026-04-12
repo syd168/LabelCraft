@@ -1119,56 +1119,77 @@ class MainWindow(QMainWindow, WindowMixin):
             wb.get(browser.lower()).open(link, new=2)
 
     def show_default_tutorial_dialog(self):
-        """Show tutorial by opening the markdown file in doc directory"""
-        import subprocess
-        import platform
+        """Show a simple tutorial dialog with basic instructions (English only)"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Quick Start Guide')
+        dialog.setMinimumSize(650, 550)
         
-        # Get the path to the tutorial file
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        tutorial_file = os.path.join(current_dir, 'doc', 'tutorial_zh-CN.md')
+        # Main layout
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(20, 20, 20, 20)
         
-        if not os.path.exists(tutorial_file):
-            QMessageBox.warning(
-                self,
-                '错误',
-                f'找不到教程文件:\n{tutorial_file}'
-            )
-            return
+        # Welcome message
+        welcome_label = QLabel('Welcome to LabelCraft!')
+        welcome_label.setStyleSheet('font-size: 16px; font-weight: bold; color: #2c3e50;')
+        welcome_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(welcome_label)
         
-        # Try to open with default markdown viewer or text editor
-        system = platform.system()
-        try:
-            if system == 'Windows':
-                os.startfile(tutorial_file)
-            elif system == 'Darwin':  # macOS
-                subprocess.call(('open', tutorial_file))
-            else:  # Linux and others
-                # Try xdg-open first (most common on Linux)
-                subprocess.call(('xdg-open', tutorial_file))
-            
-            # Show information message
-            QMessageBox.information(
-                self,
-                '教程',
-                '已打开操作教程文件。\n\n'
-                '如果系统没有默认的Markdown阅读器，\n'
-                '建议使用以下工具之一查看：\n'
-                '- VS Code\n'
-                '- Typora\n'
-                '- Markdown编辑器\n'
-                '- 或直接阅读文本内容\n\n'
-                f'文件位置:\n{tutorial_file}'
-            )
-        except Exception as e:
-            # If opening fails, show the file location
-            QMessageBox.information(
-                self,
-                '教程',
-                f'无法自动打开教程文件。\n\n'
-                f'请手动打开以下文件查看教程：\n\n'
-                f'{tutorial_file}\n\n'
-                f'错误信息: {str(e)}'
-            )
+        # Basic steps section
+        steps_title = QLabel('<b>Basic Annotation Steps:</b>')
+        steps_title.setStyleSheet('font-size: 13px; font-weight: bold; margin-top: 10px;')
+        main_layout.addWidget(steps_title)
+        
+        steps_text = QLabel(
+            '<b>1. Create/Open Project:</b> File → New Project or Open Project<br>'
+            '<b>2. Add Images:</b> Click "+ Add Images" or "+ Add Folder" in the bottom panel<br>'
+            '<b>3. Annotate:</b> Double-click an image, then press \'W\' to draw bounding boxes<br>'
+            '<b>4. Save:</b> Press Ctrl+S to save annotations (auto-saves when moving to next image)<br>'
+            '<b>5. Export:</b> Output → Export to convert annotations to desired format'
+        )
+        steps_text.setWordWrap(True)
+        steps_text.setStyleSheet('font-size: 12px; line-height: 1.6; padding-left: 10px;')
+        main_layout.addWidget(steps_text)
+        
+        # Tips section
+        tips_title = QLabel('<b>Helpful Tips:</b>')
+        tips_title.setStyleSheet('font-size: 13px; font-weight: bold; margin-top: 10px;')
+        main_layout.addWidget(tips_title)
+        
+        tips_text = QLabel(
+            '<b>• Shortcuts:</b> Help → Keyboard shortcuts to view all shortcuts<br>'
+            '<b>• Labels:</b> Use the right panel to filter and manage labels<br>'
+            '<b>• Navigation:</b> Mouse wheel to zoom, drag to pan<br>'
+            '<b>• Brightness:</b> Adjust image brightness with slider in toolbar'
+        )
+        tips_text.setWordWrap(True)
+        tips_text.setStyleSheet('font-size: 12px; line-height: 1.6; padding-left: 10px;')
+        main_layout.addWidget(tips_text)
+        
+        # More info section
+        more_info_title = QLabel('<b>For more detailed documentation:</b>')
+        more_info_title.setStyleSheet('font-size: 13px; font-weight: bold; margin-top: 10px;')
+        main_layout.addWidget(more_info_title)
+        
+        github_link = QLabel(
+            '• <a href="https://github.com/syd168/LabelCraft">Visit our GitHub repository for complete tutorials and examples</a><br>'
+            '• <a href="https://github.com/syd168/LabelCraft/blob/master/README.md">Documentation & Tutorials</a><br>'
+            '• <a href="https://github.com/syd168/LabelCraft/issues">Report Issues</a>'
+        )
+        github_link.setWordWrap(True)
+        github_link.setOpenExternalLinks(True)
+        github_link.setStyleSheet('font-size: 12px; line-height: 1.6; padding-left: 10px;')
+        main_layout.addWidget(github_link)
+        
+        main_layout.addStretch()
+        
+        # Close button
+        button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        button_box.rejected.connect(dialog.reject)
+        main_layout.addWidget(button_box)
+        
+        dialog.setLayout(main_layout)
+        dialog.exec()
 
     def show_info_dialog(self):
         """Show information about the application"""
