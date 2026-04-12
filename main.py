@@ -336,6 +336,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.dock.setFeatures(self.dock.features() ^ self.dock_features)
         
         # Set stylesheet to add spacing between content areas and status bar
+        # Also ensure text is visible in both light and dark modes
         self.setStyleSheet("""
             QStatusBar {
                 padding-top: 3px;
@@ -345,6 +346,47 @@ class MainWindow(QMainWindow, WindowMixin):
             }
             QDockWidget {
                 margin-bottom: 3px;
+            }
+            /* Ensure ComboBox text is visible */
+            QComboBox {
+                color: #000000;
+            }
+            QComboBox::drop-down {
+                color: #000000;
+            }
+            /* Ensure ListWidget text is visible */
+            QListWidget {
+                color: #000000;
+                background-color: #ffffff;
+            }
+            QListWidget::item {
+                color: #000000;
+            }
+            QListWidget::item:selected {
+                color: #ffffff;
+            }
+            /* Ensure Label text is visible */
+            QLabel {
+                color: #000000;
+            }
+            /* Ensure GroupBox text is visible */
+            QGroupBox {
+                color: #000000;
+            }
+            /* Ensure CheckBox text is visible */
+            QCheckBox {
+                color: #000000;
+            }
+            /* Ensure Button text is visible */
+            QPushButton {
+                color: #000000;
+            }
+            /* Slider labels should be black */
+            LightWidget QLabel {
+                color: #000000;
+            }
+            ZoomWidget QLabel {
+                color: #000000;
             }
         """)
 
