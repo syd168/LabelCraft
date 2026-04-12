@@ -38,6 +38,7 @@ from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
 from libs.project import Project, RecentProjectsManager
 from libs.newProjectDialog import NewProjectDialog
+from libs import __version__
 
 __appname__ = 'LabelCraft'
 
@@ -4446,13 +4447,48 @@ def get_main_app(argv=None):
     app = QApplication(argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(new_icon("app"))
-    # Tzutalin 201705+: Accept extra agruments to change predefined class file
-    argparser = argparse.ArgumentParser()
-    argparser.add_argument("image_dir", nargs="?")
-    argparser.add_argument("class_file",
-                           default=os.path.join(os.path.dirname(__file__), "data", "predefined_classes.txt"),
-                           nargs="?")
-    argparser.add_argument("save_dir", nargs="?")
+    
+    # Tzutalin 201705+: Accept extra arguments to change predefined class file
+    argparser = argparse.ArgumentParser(
+        prog='labelcraft',
+        description=f'{__appname__} - A modern graphical image annotation tool',
+        epilog='Examples:\n'
+               '  labelcraft                          # Start without parameters\n'
+               '  labelcraft /path/to/images          # Open images from directory\n'
+               '  labelcraft --classes classes.txt    # Use custom class file\n'
+               '  labelcraft --save-dir ./output      # Set default save directory\n',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    # Positional arguments (optional)
+    argparser.add_argument(
+        "image_dir",
+        nargs="?",
+        help="Directory containing images to annotate (optional)"
+    )
+    
+    # Optional arguments with better descriptions
+    argparser.add_argument(
+        "--classes", "-c",
+        dest="class_file",
+        default=os.path.join(os.path.dirname(__file__), "data", "predefined_classes.txt"),
+        help="Path to predefined classes file (default: data/predefined_classes.txt)"
+    )
+    
+    argparser.add_argument(
+        "--save-dir", "-s",
+        dest="save_dir",
+        nargs="?",
+        help="Default directory to save annotations (optional)"
+    )
+    
+    argparser.add_argument(
+        "--version", "-v",
+        action="version",
+        version=f"{__appname__} {__version__}",
+        help="Show program version and exit"
+    )
+    
     args = argparser.parse_args(argv[1:])
 
     args.image_dir = args.image_dir and os.path.normpath(args.image_dir)
