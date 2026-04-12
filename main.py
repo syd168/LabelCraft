@@ -176,7 +176,7 @@ class MainWindow(QMainWindow, WindowMixin):
         output_path_layout = QHBoxLayout()
         output_path_label = QLabel(self.get_str('outputPath'))
         self.output_dir_label = QLabel(self.get_str('notSet'))
-        self.output_dir_label.setStyleSheet('color: #666; padding: 2px;')
+        self.output_dir_label.setStyleSheet('padding: 2px;')
         output_path_layout.addWidget(output_path_label)
         output_path_layout.addWidget(self.output_dir_label)
         output_path_layout.addStretch()
@@ -186,7 +186,7 @@ class MainWindow(QMainWindow, WindowMixin):
         output_format_layout = QHBoxLayout()
         output_format_label = QLabel(self.get_str('outputFormat'))
         self.output_format_label = QLabel(self.get_str('exportFormatVOC').split('(')[0].strip())  # Extract 'PASCAL VOC' without extension
-        self.output_format_label.setStyleSheet('color: #666; padding: 2px;')
+        self.output_format_label.setStyleSheet('padding: 2px;')
         output_format_layout.addWidget(output_format_label)
         output_format_layout.addWidget(self.output_format_label)
         output_format_layout.addStretch()
@@ -336,7 +336,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.dock.setFeatures(self.dock.features() ^ self.dock_features)
         
         # Set stylesheet to add spacing between content areas and status bar
-        # Also ensure text is visible in both light and dark modes
+        # Use adaptive colors that work in both light and dark modes
         self.setStyleSheet("""
             QStatusBar {
                 padding-top: 3px;
@@ -347,46 +347,12 @@ class MainWindow(QMainWindow, WindowMixin):
             QDockWidget {
                 margin-bottom: 3px;
             }
-            /* Ensure ComboBox text is visible */
-            QComboBox {
-                color: #000000;
-            }
-            QComboBox::drop-down {
-                color: #000000;
-            }
-            /* Ensure ListWidget text is visible */
+            /* Ensure ListWidget has proper background */
             QListWidget {
-                color: #000000;
-                background-color: #ffffff;
-            }
-            QListWidget::item {
-                color: #000000;
+                background-color: palette(base);
             }
             QListWidget::item:selected {
-                color: #ffffff;
-            }
-            /* Ensure Label text is visible */
-            QLabel {
-                color: #000000;
-            }
-            /* Ensure GroupBox text is visible */
-            QGroupBox {
-                color: #000000;
-            }
-            /* Ensure CheckBox text is visible */
-            QCheckBox {
-                color: #000000;
-            }
-            /* Ensure Button text is visible */
-            QPushButton {
-                color: #000000;
-            }
-            /* Slider labels should be black */
-            LightWidget QLabel {
-                color: #000000;
-            }
-            ZoomWidget QLabel {
-                color: #000000;
+                color: palette(highlighted-text);
             }
         """)
 
@@ -1945,7 +1911,7 @@ class MainWindow(QMainWindow, WindowMixin):
         for i in range(self.pending_list_widget.count()):
             item = self.pending_list_widget.item(i)
             if item.text() == image_path:
-                # Set foreground color to green
+                # Set foreground color to green (theme-adaptive)
                 item.setForeground(QColor(0, 180, 0))  # Green color
                 # Optionally make it bold
                 font = item.font()
@@ -2982,11 +2948,11 @@ class MainWindow(QMainWindow, WindowMixin):
             item = self.file_list_widget.item(i)
             img_path = item.text()
             if self._has_annotation(img_path):
-                # Annotated files: green
-                item.setForeground(QColor('green'))
+                # Annotated files: green (use theme-adaptive color)
+                item.setForeground(QColor(0, 180, 0))  # Green color
             else:
-                # Unannotated files: dark blue for better visibility
-                item.setForeground(QColor('#2196F3'))  # Material Design Blue
+                # Unannotated files: use theme's text color for better visibility
+                item.setForeground(QColor())  # Reset to default theme color
         
         # Update progress info
         self.update_progress_info()

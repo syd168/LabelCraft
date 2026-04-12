@@ -75,7 +75,7 @@ class NewProjectDialog(QDialog):
         label_layout = QVBoxLayout()
         
         label_info = QLabel(get_str('labelInfoText'))
-        label_info.setStyleSheet('color: #666; font-size: 11px;')
+        label_info.setStyleSheet('font-size: 11px;')
         label_layout.addWidget(label_info)
         
         self.label_list = QListWidget()
