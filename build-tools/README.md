@@ -66,6 +66,60 @@ chmod +x build-pypi.sh
 
 This will create source distribution and wheel packages, and optionally upload to PyPI.
 
+### Install from PyPI Package
+
+After building or once the package is published to PyPI, you can install it:
+
+#### Install from Local Build
+
+If you built the package locally:
+
+```bash
+# Install the wheel file (replace <version> with actual version)
+pip install dist/labelCraft-<version>-py3-none-any.whl
+
+# Or install from source distribution
+pip install dist/labelCraft-<version>.tar.gz
+```
+
+#### Install from PyPI (Published Package)
+
+Once published to PyPI:
+
+```bash
+# Install to current Python environment
+pip install labelcraft
+
+# Install to virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+pip install labelcraft
+```
+
+#### Usage After Installation
+
+```bash
+# Launch the application
+labelcraft
+
+# With image path
+labelcraft /path/to/image.jpg
+
+# With full parameters
+labelcraft images/ classes.txt annotations/
+```
+
+#### Upgrade and Uninstall
+
+```bash
+# Upgrade to latest version
+pip install --upgrade labelcraft
+
+# Uninstall
+pip uninstall labelcraft
+```
+
 ## Troubleshooting
 
 ### Linux Build Issues
