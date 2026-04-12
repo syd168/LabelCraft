@@ -50,5 +50,8 @@ libs/resources.py
 
 # Release notes (auto-generated)
 RELEASE_NOTES.md
+
+# Documentation (keep locally, not tracked by Git)
 doc/
+
 build-tools/
