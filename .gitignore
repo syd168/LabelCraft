@@ -50,6 +50,5 @@ libs/resources.py
 
 # Release notes (auto-generated)
 RELEASE_NOTES.md
-doc/TRANSLATION_GUIDE.md
-doc/打包说明.md
+doc/
 build-tools/
