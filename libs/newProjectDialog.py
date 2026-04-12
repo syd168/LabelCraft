@@ -81,7 +81,7 @@ class NewProjectDialog(QDialog):
         
         # Label input area - supports direct input and paste
         input_hint = QLabel(get_str('labelInputHint'))
-        input_hint.setStyleSheet('font-size: 11px; color: palette(mid);')
+        input_hint.setStyleSheet('font-size: 11px; color: palette(text);')
         label_layout.addWidget(input_hint)
         
         self.label_input = QTextEdit()
