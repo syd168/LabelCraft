@@ -52,3 +52,4 @@ libs/resources.py
 RELEASE_NOTES.md
 doc/TRANSLATION_GUIDE.md
 doc/打包说明.md
+build-tools/
