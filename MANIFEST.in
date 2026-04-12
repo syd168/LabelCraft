@@ -6,6 +6,7 @@ include README.rst
 include resources.qrc
 
 recursive-include data *
+recursive-include resources *
 recursive-include icons *
 recursive-include libs *
 

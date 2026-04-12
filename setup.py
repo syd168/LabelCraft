@@ -137,7 +137,7 @@ setup(
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
-        'Topic :: Multimedia :: Graphics :: Annotation',
+        'Topic :: Multimedia :: Graphics',
     ],
     options={'py2app': OPTIONS} if _platform == "darwin" else {},
     setup_requires=SET_REQUIRES,
