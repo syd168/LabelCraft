@@ -109,20 +109,40 @@ class Project:
         """Check if project has minimum required information"""
         return bool(self.name and self.project_dir)
     
-    def get_info_summary(self):
-        """Get a human-readable summary of the project"""
+    def get_info_summary(self, tr_func=None):
+        """Get a human-readable summary of the project
+        
+        Args:
+            tr_func: Optional translation function. If not provided, uses English labels.
+        """
         # Truncate labels for display
         if len(self.labels) <= 5:
             labels_str = ', '.join(self.labels)
         else:
             labels_str = ', '.join(self.labels[:5]) + '...'
         
+        # Use translation function if provided, otherwise use English
+        if tr_func:
+            name_label = tr_func('projectName')
+            location_label = tr_func('projectLocation')
+            annotation_label = tr_func('annotationDir')
+            label_count_label = tr_func('labelCount')
+            format_label = tr_func('outputFormat')
+            not_set_label = tr_func('notSet')
+        else:
+            name_label = 'Project Name'
+            location_label = 'Location'
+            annotation_label = 'Annotation Directory'
+            label_count_label = 'Labels'
+            format_label = 'Output Format'
+            not_set_label = 'Not Set'
+        
         return (
-            f"{self.tr('projectName')}: {self.name}\n"
-            f"{self.tr('projectLocation')}: {self.project_dir}\n"
-            f"{self.tr('annotationDir')}: {self.annotation_dir or self.tr('notSet')}\n"
-            f"{self.tr('labelCount')}: {len(self.labels)} ({labels_str})\n"
-            f"{self.tr('outputFormat')}: {self.format}"
+            f"{name_label}: {self.name}\n"
+            f"{location_label}: {self.project_dir}\n"
+            f"{annotation_label}: {self.annotation_dir or not_set_label}\n"
+            f"{label_count_label}: {len(self.labels)} ({labels_str})\n"
+            f"{format_label}: {self.format}"
         )
 
 

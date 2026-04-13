@@ -3751,7 +3751,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     self,
                     self.get_str('successTitle'),
                     self.get_str('projectCreatedSuccess2').format(project.name) + '\n\n' +
-                    project.get_info_summary()
+                    project.get_info_summary(tr_func=self.get_str)
                 )
                 
             except Exception as e:
@@ -3778,7 +3778,7 @@ class MainWindow(QMainWindow, WindowMixin):
             QMessageBox.information(
                 self,
                 self.get_str('successTitle'),
-                self.get_str('projectLoaded').format(project.name) + '\n\n' + project.get_info_summary()
+                self.get_str('projectLoaded').format(project.name) + '\n\n' + project.get_info_summary(tr_func=self.get_str)
             )
             
         except FileNotFoundError:

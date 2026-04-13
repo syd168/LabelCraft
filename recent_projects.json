@@ -1,5 +1,10 @@
 [
   {
+    "name": "test1",
+    "path": "/home/syd168/temp/temp/test1.labelcraft",
+    "opened_at": "2026-04-14T07:41:27.659791"
+  },
+  {
     "name": "test",
     "path": "/home/syd168/temp/temp/test.labelcraft",
     "opened_at": "2026-04-14T07:38:22.824960"
