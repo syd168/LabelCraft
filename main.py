@@ -177,26 +177,26 @@ class MainWindow(QMainWindow, WindowMixin):
         right_panel_layout.setSpacing(10)
         
         # Section 1: Output settings
-        output_group = QGroupBox(self.get_str('outputSettings'))
+        self.output_group = QGroupBox(self.get_str('outputSettings'))
         output_layout = QVBoxLayout()
         output_layout.setSpacing(5)
         
         # Output path (read-only label)
         output_path_layout = QHBoxLayout()
-        output_path_label = QLabel(self.get_str('outputPath'))
+        self.output_path_label = QLabel(self.get_str('outputPath'))
         self.output_dir_label = QLabel(self.get_str('notSet'))
         self.output_dir_label.setStyleSheet('padding: 2px;')
-        output_path_layout.addWidget(output_path_label)
+        output_path_layout.addWidget(self.output_path_label)
         output_path_layout.addWidget(self.output_dir_label)
         output_path_layout.addStretch()
         output_layout.addLayout(output_path_layout)
         
         # Output format (read-only label)
         output_format_layout = QHBoxLayout()
-        output_format_label = QLabel(self.get_str('outputFormat'))
+        self.output_format_title_label = QLabel(self.get_str('outputFormat'))
         self.output_format_label = QLabel(self.get_str('exportFormatVOC').split('(')[0].strip())  # Extract 'PASCAL VOC' without extension
         self.output_format_label.setStyleSheet('padding: 2px;')
-        output_format_layout.addWidget(output_format_label)
+        output_format_layout.addWidget(self.output_format_title_label)
         output_format_layout.addWidget(self.output_format_label)
         output_format_layout.addStretch()
         output_layout.addLayout(output_format_layout)
@@ -218,21 +218,21 @@ class MainWindow(QMainWindow, WindowMixin):
         default_label_layout.addWidget(self.default_label_combo_box)
         output_layout.addLayout(default_label_layout)
         
-        output_group.setLayout(output_layout)
-        right_panel_layout.addWidget(output_group)
+        self.output_group.setLayout(output_layout)
+        right_panel_layout.addWidget(self.output_group)
         
         # Section 3: Label filter (combo box) - filter shapes by label
-        filter_label_group = QGroupBox(self.get_str('labelFilter'))
+        self.filter_label_group = QGroupBox(self.get_str('labelFilter'))
         filter_label_layout = QVBoxLayout()
         filter_label_layout.setSpacing(5)
         # Initialize with empty list, will be updated when loading labels
         self.combo_box = ComboBox(self, items=[])
         filter_label_layout.addWidget(self.combo_box)
-        filter_label_group.setLayout(filter_label_layout)
-        right_panel_layout.addWidget(filter_label_group)
+        self.filter_label_group.setLayout(filter_label_layout)
+        right_panel_layout.addWidget(self.filter_label_group)
         
         # Section 4: Label list
-        label_list_group = QGroupBox(self.get_str('labelList'))
+        self.label_list_group = QGroupBox(self.get_str('labelList'))
         label_list_layout_inner = QVBoxLayout()
         label_list_layout_inner.setSpacing(5)
         
@@ -242,18 +242,18 @@ class MainWindow(QMainWindow, WindowMixin):
         self.label_list.itemChanged.connect(self.label_item_changed)
         label_list_layout_inner.addWidget(self.label_list)
         
-        label_list_group.setLayout(label_list_layout_inner)
-        right_panel_layout.addWidget(label_list_group)
+        self.label_list_group.setLayout(label_list_layout_inner)
+        right_panel_layout.addWidget(self.label_list_group)
         
         # Section 5: Completed annotations (scan from annotations directory)
-        completed_group = QGroupBox(self.get_str('completedAnnotations'))
+        self.completed_group = QGroupBox(self.get_str('completedAnnotations'))
         completed_layout = QVBoxLayout()
         completed_layout.setSpacing(5)
         
         self.file_list_widget.itemDoubleClicked.connect(self.file_item_double_clicked)
         completed_layout.addWidget(self.file_list_widget)
-        completed_group.setLayout(completed_layout)
-        right_panel_layout.addWidget(completed_group)
+        self.completed_group.setLayout(completed_layout)
+        right_panel_layout.addWidget(self.completed_group)
         
         right_panel_layout.addStretch()
         
@@ -309,16 +309,16 @@ class MainWindow(QMainWindow, WindowMixin):
         # Buttons for pending queue - horizontal layout
         pending_btn_layout = QHBoxLayout()
         pending_btn_layout.setSpacing(5)
-        add_images_btn = QPushButton(self.get_str('addImages'))
-        add_images_btn.clicked.connect(self.add_images_to_pending)
-        add_folder_btn = QPushButton(self.get_str('addFolder'))
-        add_folder_btn.clicked.connect(self.add_folder_to_pending)
-        clear_pending_btn = QPushButton(self.get_str('clearPending'))
-        clear_pending_btn.clicked.connect(self.clear_pending_queue)
-        pending_btn_layout.addWidget(add_images_btn)
-        pending_btn_layout.addWidget(add_folder_btn)
+        self.add_images_btn = QPushButton(self.get_str('addImages'))
+        self.add_images_btn.clicked.connect(self.add_images_to_pending)
+        self.add_folder_btn = QPushButton(self.get_str('addFolder'))
+        self.add_folder_btn.clicked.connect(self.add_folder_to_pending)
+        self.clear_pending_btn = QPushButton(self.get_str('clearPending'))
+        self.clear_pending_btn.clicked.connect(self.clear_pending_queue)
+        pending_btn_layout.addWidget(self.add_images_btn)
+        pending_btn_layout.addWidget(self.add_folder_btn)
         pending_btn_layout.addStretch()
-        pending_btn_layout.addWidget(clear_pending_btn)
+        pending_btn_layout.addWidget(self.clear_pending_btn)
         pending_layout.addLayout(pending_btn_layout)
         
         # Pending images list (below buttons)
@@ -852,12 +852,51 @@ class MainWindow(QMainWindow, WindowMixin):
         # Retranslate menus
         self.retranslate_menus()
         
-        # Update dock widget
+        # Update dock widget title
         if hasattr(self, 'dock'):
             self.dock.setObjectName(self.get_str('labels'))
+            self.dock.setWindowTitle(self.get_str('labels'))
+        
+        # Update right panel group boxes
+        if hasattr(self, 'output_group'):
+            self.output_group.setTitle(self.get_str('outputSettings'))
+        if hasattr(self, 'output_path_label'):
+            self.output_path_label.setText(self.get_str('outputPath'))
+        if hasattr(self, 'output_format_title_label'):
+            self.output_format_title_label.setText(self.get_str('outputFormat'))
+        
+        # Update default label checkbox text
+        if hasattr(self, 'use_default_label_checkbox'):
+            self.use_default_label_checkbox.setText(self.get_str('defaultLabel'))
+        
+        # Update filter label group title
+        if hasattr(self, 'filter_label_group'):
+            self.filter_label_group.setTitle(self.get_str('labelFilter'))
+        
+        # Update label list group title
+        if hasattr(self, 'label_list_group'):
+            self.label_list_group.setTitle(self.get_str('labelList'))
+        
+        # Update completed annotations group title
+        if hasattr(self, 'completed_group'):
+            self.completed_group.setTitle(self.get_str('completedAnnotations'))
+        
+        # Update pending queue buttons
+        if hasattr(self, 'add_images_btn'):
+            self.add_images_btn.setText(self.get_str('addImages'))
+        if hasattr(self, 'add_folder_btn'):
+            self.add_folder_btn.setText(self.get_str('addFolder'))
+        if hasattr(self, 'clear_pending_btn'):
+            self.clear_pending_btn.setText(self.get_str('clearPending'))
+        
+        # Note: ZoomWidget and LightWidget titles are not dynamically updated
+        # They would need custom update_title() methods to be added
+        # For now, they keep their initial language
         
         # Refresh UI
         self.update()
+        
+        print(f"✓ UI retranslated for language: {self.i18n.current_language}")
     
     def retranslate_menus(self):
         """Retranslate all menu titles and actions when language changes."""
