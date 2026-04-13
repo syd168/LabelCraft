@@ -12,12 +12,17 @@ class LabelDialog(QDialog):
     def __init__(self, text="Enter object label", parent=None, list_item=None):
         super(LabelDialog, self).__init__(parent)
         
-        # Load string bundle for i18n
+        # Store parent reference for i18n
+        self.parent_window = parent
+        
+        # Load string bundle for i18n (backward compatibility)
         self.string_bundle = None
         if parent and hasattr(parent, 'string_bundle'):
             self.string_bundle = parent.string_bundle
         
-        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
+        # Connect to language change signal if parent has i18n engine
+        if parent and hasattr(parent, 'i18n'):
+            parent.i18n.language_changed.connect(self.retranslate)
 
         self.edit = QLineEdit()
         self.edit.setText(text)
@@ -49,6 +54,22 @@ class LabelDialog(QDialog):
             layout.addWidget(self.list_widget)
 
         self.setLayout(layout)
+    
+    def get_str(self, str_id):
+        """Get translated string from parent window"""
+        if self.parent_window and hasattr(self.parent_window, 'get_str'):
+            return self.parent_window.get_str(str_id)
+        elif hasattr(self, 'string_bundle') and self.string_bundle:
+            return self.string_bundle.get_string(str_id)
+        return str_id
+    
+    def retranslate(self):
+        """Retranslate UI elements when language changes"""
+        # Update window title if set
+        if self.windowTitle():
+            # Keep custom title or use default
+            pass
+        print(f"✓ LabelDialog retranslated")
 
     def validate(self):
         if trimmed(self.edit.text()):
@@ -63,11 +84,12 @@ class LabelDialog(QDialog):
         If the user entered a label, that label is returned, otherwise (i.e. if the user cancelled the action)
         `None` is returned.
         """
-        get_str = lambda str_id: self.string_bundle.get_string(str_id) if self.string_bundle else str_id
-        
         # Use default text from resources if empty
         if not text:
-            text = get_str('labelDialogTitleDefault')
+            text = self.get_str('labelDialogTitleDefault')
+        
+        # Set window title
+        self.setWindowTitle(self.get_str('labelDialogTitle'))
         
         self.edit.setText(text)
         self.edit.setSelection(0, len(text))

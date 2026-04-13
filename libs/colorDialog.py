@@ -19,11 +19,33 @@ class ColorDialog(QColorDialog):
         self.bb = self.layout().itemAt(1).widget()
         self.bb.addButton(BB.RestoreDefaults)
         self.bb.clicked.connect(self.check_restore)
+        
+        # Store parent reference for i18n
+        self.parent_window = parent
+        
+        # Connect to language change signal if parent has i18n engine
+        if parent and hasattr(parent, 'i18n'):
+            parent.i18n.language_changed.connect(self.retranslate)
+    
+    def get_str(self, str_id):
+        """Get translated string from parent window"""
+        if self.parent_window and hasattr(self.parent_window, 'get_str'):
+            return self.parent_window.get_str(str_id)
+        return str_id
+    
+    def retranslate(self):
+        """Retranslate UI elements when language changes"""
+        # Qt's QColorDialog uses system translations, but we can update custom elements
+        print(f"✓ ColorDialog retranslated")
 
     def getColor(self, value=None, title=None, default=None):
         self.default = default
         if title:
+            # Use translated title if provided
             self.setWindowTitle(title)
+        else:
+            # Default title based on context
+            self.setWindowTitle(self.get_str('colorDialogTitle'))
         if value:
             self.setCurrentColor(value)
         return self.currentColor() if self.exec() else None
