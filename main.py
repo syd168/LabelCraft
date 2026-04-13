@@ -806,13 +806,16 @@ class MainWindow(QMainWindow, WindowMixin):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
     def get_str(self, str_id):
-        """Get translated string by ID (uses new i18n engine with fallback to old system)"""
-        # Try new i18n engine first
+        """Get translated string by ID (uses old StringBundle as primary, new i18n as fallback)"""
+        # Try old string bundle first (has all existing translations)
         try:
-            return self.i18n.tr(str_id)
-        except:
-            # Fallback to old string bundle
             return self.string_bundle.get_string(str_id)
+        except:
+            # Fallback to new i18n engine
+            try:
+                return self.i18n.tr(str_id)
+            except:
+                return f"[MISSING: {str_id}]"
     
     def on_language_changed(self, lang_code: str):
         """
