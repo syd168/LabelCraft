@@ -829,13 +829,13 @@ class MainWindow(QMainWindow, WindowMixin):
         Returns:
             Translated string
         """
-        # Try old string bundle first (has all existing translations)
+        # Use new i18n engine first (supports dynamic language switching)
         try:
-            return self.string_bundle.get_string(key)
+            return self.i18n.tr(key, default=default, **kwargs)
         except:
-            # Fallback to new i18n engine
+            # Fallback to old string bundle
             try:
-                return self.i18n.tr(key, default=default, **kwargs)
+                return self.string_bundle.get_string(key)
             except:
                 return f"[MISSING: {key}]"
     
