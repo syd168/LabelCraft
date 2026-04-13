@@ -21,7 +21,6 @@ from libs.constants import *
 from libs.utils import *
 from libs.settings import Settings
 from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR
-from libs.i18n import StringBundle
 from libs.i18n_engine import I18nEngine
 from libs.canvas import Canvas
 from libs.zoomWidget import ZoomWidget
@@ -86,9 +85,6 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Initialize modern I18n engine (with dynamic switching support)
         self.i18n = I18nEngine()
-        
-        # Keep old string bundle for backward compatibility
-        self.string_bundle = StringBundle.get_bundle()
         
         # Connect language change signal for dynamic UI updates
         self.i18n.language_changed.connect(self.on_language_changed)
@@ -655,8 +651,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.lang_fr.setActionGroup(lang_action_group)
         self.lang_fr.triggered.connect(lambda: self.change_language('fr-FR'))
 
-        # Set current language based on system locale
-        current_locale = self.string_bundle.locale if hasattr(self.string_bundle, 'locale') else None
+        # Set current language based on i18n engine
+        current_locale = self.i18n.current_language
         if current_locale:
             if 'zh-CN' in current_locale or 'zh_CN' in current_locale:
                 self.lang_zh_cn.setChecked(True)
@@ -829,15 +825,12 @@ class MainWindow(QMainWindow, WindowMixin):
         Returns:
             Translated string
         """
-        # Use new i18n engine first (supports dynamic language switching)
+        # Use new i18n engine (supports dynamic language switching)
         try:
             return self.i18n.tr(key, default=default, **kwargs)
-        except:
-            # Fallback to old string bundle
-            try:
-                return self.string_bundle.get_string(key)
-            except:
-                return f"[MISSING: {key}]"
+        except Exception as e:
+            print(f"Translation error for key '{key}': {e}")
+            return default or f"[MISSING: {key}]"
     
     def on_language_changed(self, lang_code: str):
         """
