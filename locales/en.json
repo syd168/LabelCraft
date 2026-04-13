@@ -1,0 +1,261 @@
+{
+  "app": {
+    "title": "LabelCraft",
+    "version": "Version {version}"
+  },
+  
+  "menu": {
+    "file": "&File",
+    "edit": "&Edit",
+    "view": "&View",
+    "help": "&Help",
+    "project": "&Project",
+    "file_items": {
+      "open": "&Open",
+      "open_dir": "Open &Dir",
+      "open_next": "Open &Next",
+      "open_prev": "Open &Prev",
+      "save": "&Save",
+      "save_as": "Save &As...",
+      "delete_image": "&Delete Image",
+      "reset_all": "&Reset All",
+      "quit": "&Quit"
+    },
+    "edit_items": {
+      "create_rect": "Create RectBox",
+      "edit_label": "Edit Label",
+      "copy_rect": "Copy RectBox",
+      "delete_rect": "Delete RectBox",
+      "undo": "&Undo",
+      "undo_last_point": "Undo Last Point",
+      "add_rect_to_group": "Add RectBox to Group",
+      "delete_rect_from_group": "Delete RectBox from Group",
+      "group_selected_rects": "Group Selected RectBoxes",
+      "ungroup_selected_rects": "Ungroup Selected RectBoxes"
+    },
+    "view_items": {
+      "next_image": "&Next Image",
+      "prev_image": "&Previous Image",
+      "default_line_color": "&Default Line Color",
+      "default_fill_color": "Default &Fill Color",
+      "zoom_in": "Zoom &In",
+      "zoom_out": "Zoom &Out",
+      "original_size": "&Original Size",
+      "fit_window": "&Fit Window",
+      "fit_width": "Fit &Width",
+      "brightness": "Brightness"
+    },
+    "help_items": {
+      "tutorial": "&Tutorial",
+      "pypi_page": "&PyPI Page",
+      "github_repo": "&GitHub Repository",
+      "about": "&About"
+    }
+  },
+  
+  "toolbar": {
+    "previous": "Previous Image",
+    "next": "Next Image",
+    "open": "Open",
+    "open_dir": "Open Dir",
+    "verify": "Verify Image",
+    "save": "Save",
+    "create": "Create RectBox",
+    "delete": "Delete RectBox",
+    "edit": "Edit RectBox",
+    "copy": "Copy RectBox",
+    "shape_line_color": "Shape Line Color",
+    "shape_fill_color": "Shape Fill Color",
+    "advanced_mode": "Advanced Mode",
+    "beginner_mode": "Beginner Mode",
+    "fit_window": "Fit Window",
+    "fit_width": "Fit Width",
+    "brightness": "Brightness"
+  },
+  
+  "dialogs": {
+    "new_project": {
+      "title": "New Project",
+      "edit_title": "Edit Project",
+      "project_info": "Project Information",
+      "project_name": "Project Name:",
+      "project_name_placeholder": "Enter project name",
+      "project_dir": "Project Directory:",
+      "project_dir_placeholder": "Select project directory",
+      "browse": "Browse...",
+      "labels": "Labels",
+      "label_info": "Add labels for your project. You can add them one by one or paste multiple labels from Excel.",
+      "label_hint": "Enter label (press Enter to add)",
+      "label_input_placeholder": "Type label and press Enter...",
+      "add_label": "Add",
+      "remove_label": "Remove",
+      "clear_labels": "Clear All",
+      "batch_add": "Batch Add",
+      "load_labels": "Load from File",
+      "format": "Output Format",
+      "format_voc": "PASCAL VOC (.xml)",
+      "format_yolo": "YOLO (.txt)",
+      "format_createml": "Create ML (.json)",
+      "create": "Create Project",
+      "save": "Save Changes"
+    },
+    
+    "edit_project": {
+      "title": "⚠️ Edit Project",
+      "warning_msg": "Editing project configuration may cause the following issues:\n• Modify output path: need to migrate existing annotation files\n• Modify output format: need to convert annotation file format\n• Modify label list: may cause label mismatch",
+      "backup_recommendation": "It is recommended to backup the project before editing!",
+      "continue_question": "Continue editing?"
+    },
+    
+    "label": {
+      "title": "Enter Object Label",
+      "default_title": "Label Dialog",
+      "prompt": "Object label:"
+    },
+    
+    "color": {
+      "title": "Choose Color",
+      "line_color": "Line Color",
+      "fill_color": "Fill Color"
+    },
+    
+    "file_dialog": {
+      "open_image": "Open Image",
+      "open_dir": "Open Directory",
+      "select_project_dir": "Select Project Directory",
+      "save_annotation": "Save Annotation",
+      "save_annotation_as": "Save Annotation As",
+      "load_labels": "Load Labels from File",
+      "image_files": "Image Files",
+      "all_files": "All Files"
+    }
+  },
+  
+  "panels": {
+    "output_settings": "Output Settings",
+    "output_path": "Output Path:",
+    "output_format": "Output Format:",
+    "not_set": "Not set",
+    "default_label": "Use default label",
+    "difficult": "Difficult",
+    "labels": "Labels",
+    "files": "Files",
+    "light": "Brightness",
+    "zoom": "Zoom"
+  },
+  
+  "messages": {
+    "welcome": "Welcome to {app_name}",
+    "saving": "Saving...",
+    "saved": "Saved: {path}",
+    "loading": "Loading...",
+    "loaded": "Loaded: {path}",
+    "no_open_project": "No project is currently open. Please create or open a project first.",
+    "no_open_project_1": "Please create a new project or open an existing one.",
+    "no_open_project_2": "Go to Project → New Project to get started.",
+    "no_open_project_3": "No project is open",
+    "project_created": "Project \"{name}\" created successfully!",
+    "project_updated": "Project \"{name}\" has been updated!",
+    "project_loaded": "Project loaded: {name}",
+    "error": {
+      "title": "Error",
+      "load_failed": "Failed to load: {path}",
+      "save_failed": "Failed to save: {path}",
+      "invalid_format": "Invalid file format: {format}",
+      "file_not_found": "File not found: {path}",
+      "create_project_failed": "Failed to create project: {error}",
+      "update_project_failed": "Failed to update project: {error}",
+      "load_label_failed": "Failed to load label file: {error}"
+    },
+    "warning": {
+      "title": "Warning",
+      "unsaved_changes": "You have unsaved changes. Save before closing?",
+      "label_exists": "Label '{label}' already exists!",
+      "migration_title": "🔄 Migrate Annotation Files",
+      "config_changed": "Configuration changes detected:",
+      "annotations_found": "{count} annotation files found",
+      "choose_action": "Please choose how to handle:",
+      "copy_keep": "Copy files (keep original as backup)",
+      "move_delete": "Move files (delete original after verification)",
+      "skip": "Skip migration (manual handling required)"
+    },
+    "success": {
+      "title": "Success",
+      "migration_complete": "Migration Complete",
+      "migrated": "Successfully {mode} {count} annotation files",
+      "converted": "{count} files require format conversion",
+      "manual_check": "It is recommended to manually check the converted files",
+      "from": "From: ",
+      "to": "To: ",
+      "original_kept": "Original files have been kept as backup.",
+      "original_deleted": "Original files have been deleted. Please verify the files in the new directory!"
+    },
+    "info": {
+      "no_annotations": "No annotation files found in {path}",
+      "migration_failed": "Migration failed: {error}"
+    }
+  },
+  
+  "actions": {
+    "use_default_label": "Use default label",
+    "use_difficult": "Difficult",
+    "expert_mode": "Expert Mode",
+    "beginner_mode": "Beginner Mode"
+  },
+  
+  "status": {
+    "ready": "Ready",
+    "saving": "Saving...",
+    "loading": "Loading...",
+    "annotating": "Annotating: {filename}"
+  },
+  
+  "shortcuts": {
+    "previous": "Previous: A or Left Arrow",
+    "next": "Next: D or Right Arrow",
+    "verify": "Verify: Space",
+    "save": "Save: Ctrl+S",
+    "create": "Create: W",
+    "edit": "Edit: Ctrl+J",
+    "delete": "Delete: Delete",
+    "copy": "Copy: Ctrl+C / Ctrl+V",
+    "undo": "Undo: Ctrl+Z",
+    "zoom_in": "Zoom In: Ctrl++",
+    "zoom_out": "Zoom Out: Ctrl+-",
+    "fit_window": "Fit Window: Ctrl+F",
+    "toggle_toolbar": "Toggle Toolbar: Ctrl+T"
+  },
+  
+  "help": {
+    "tutorial": "<p>Read our <b><a href='{url}'>tutorial</a></b> for detailed instructions.</p>",
+    "shortcuts_title": "Keyboard Shortcuts",
+    "about_title": "About LabelCraft",
+    "about_text": "<h3>LabelCraft {version}</h3><p>A modern graphical image annotation tool based on labelImg.</p><p>License: MIT</p><p>GitHub: <a href='{github}'>{github}</a></p>"
+  },
+  
+  "export": {
+    "format_voc": "PASCAL VOC",
+    "format_yolo": "YOLO",
+    "format_createml": "Create ML",
+    "export_success": "Export successful: {path}",
+    "export_failed": "Export failed: {error}"
+  },
+  
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "close": "Close",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "copy": "Copy",
+    "move": "Move",
+    "skip": "Skip",
+    "from": "From:",
+    "to": "To:",
+    "recommendations": "Recommendations"
+  }
+}

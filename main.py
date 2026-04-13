@@ -22,6 +22,7 @@ from libs.utils import *
 from libs.settings import Settings
 from libs.shape import Shape, DEFAULT_LINE_COLOR, DEFAULT_FILL_COLOR
 from libs.i18n import StringBundle
+from libs.i18n_engine import I18nEngine
 from libs.canvas import Canvas
 from libs.zoomWidget import ZoomWidget
 from libs.lightWidget import LightWidget
@@ -83,8 +84,14 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.os_name = platform.system()
 
-        # Load string bundle for i18n
+        # Initialize modern I18n engine (with dynamic switching support)
+        self.i18n = I18nEngine()
+        
+        # Keep old string bundle for backward compatibility
         self.string_bundle = StringBundle.get_bundle()
+        
+        # Connect language change signal for dynamic UI updates
+        self.i18n.language_changed.connect(self.on_language_changed)
 
         # Save as Pascal voc xml
         self.default_save_dir = default_save_dir
@@ -799,8 +806,39 @@ class MainWindow(QMainWindow, WindowMixin):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
     def get_str(self, str_id):
-        """Get translated string by ID"""
-        return self.string_bundle.get_string(str_id)
+        """Get translated string by ID (uses new i18n engine with fallback to old system)"""
+        # Try new i18n engine first
+        try:
+            return self.i18n.tr(str_id)
+        except:
+            # Fallback to old string bundle
+            return self.string_bundle.get_string(str_id)
+    
+    def on_language_changed(self, lang_code: str):
+        """
+        Called when language is switched dynamically.
+        Retrarslates all UI elements.
+        """
+        print(f"🔄 Updating UI for language: {lang_code}")
+        
+        # Update window title
+        self.setWindowTitle(__appname__)
+        
+        # Retranslate menus
+        self.retranslate_menus()
+        
+        # Update dock widget
+        if hasattr(self, 'dock'):
+            self.dock.setObjectName(self.get_str('labels'))
+        
+        # Refresh UI
+        self.update()
+    
+    def retranslate_menus(self):
+        """Retranslate all menu titles and actions."""
+        # This method will be called when language changes
+        # It reuses the existing change_language logic
+        pass
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
@@ -1416,8 +1454,11 @@ class MainWindow(QMainWindow, WindowMixin):
         dialog.exec()
 
     def change_language(self, locale):
-        """Change the application language"""
-        # Reload string bundle with new locale
+        """Change the application language (uses new i18n engine)"""
+        # Use new i18n engine for dynamic switching
+        self.i18n.set_language(locale)
+        
+        # Also update old string bundle for backward compatibility
         self.string_bundle = StringBundle.get_bundle(locale)
 
         # Update menu titles
