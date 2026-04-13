@@ -835,10 +835,27 @@ class MainWindow(QMainWindow, WindowMixin):
         self.update()
     
     def retranslate_menus(self):
-        """Retranslate all menu titles and actions."""
-        # This method will be called when language changes
-        # It reuses the existing change_language logic
-        pass
+        """Retranslate all menu titles and actions when language changes."""
+        # Update menu titles
+        if hasattr(self.menus, 'file'):
+            self.menus.file.setTitle(self.get_str('menu.file'))
+        if hasattr(self.menus, 'edit'):
+            self.menus.edit.setTitle(self.get_str('menu.edit'))
+        if hasattr(self.menus, 'view'):
+            self.menus.view.setTitle(self.get_str('menu.view'))
+        if hasattr(self.menus, 'help'):
+            self.menus.help.setTitle(self.get_str('menu.help'))
+        if hasattr(self.menus, 'language'):
+            self.menus.language.setTitle(self.get_str('Language / 语言'))
+        
+        # Update toolbar toggle action
+        if hasattr(self, 'tools'):
+            for action in self.tools.toggleViewAction().parent().actions():
+                if 'Toolbar' in action.text() or '工具栏' in action.text():
+                    action.setText(self.get_str('toolbarToggleText', default='Toggle Toolbar'))
+                    break
+        
+        print(f"✓ UI retranslated for language: {self.i18n.current_language}")
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:

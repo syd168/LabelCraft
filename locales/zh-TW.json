@@ -1,0 +1,261 @@
+{
+  "app": {
+    "title": "LabelCraft",
+    "version": "版本 {version}"
+  },
+  
+  "menu": {
+    "file": "檔案(&F)",
+    "edit": "編輯(&E)",
+    "view": "檢視(&V)",
+    "help": "說明(&H)",
+    "project": "專案(&P)",
+    "file_items": {
+      "open": "開啟(&O)",
+      "open_dir": "開啟目錄(&D)",
+      "open_next": "開啟下一個(&N)",
+      "open_prev": "開啟上一個(&P)",
+      "save": "儲存(&S)",
+      "save_as": "另存為(&A)...",
+      "delete_image": "刪除影像(&D)",
+      "reset_all": "重設全部(&R)",
+      "quit": "離開(&Q)"
+    },
+    "edit_items": {
+      "create_rect": "建立矩形框",
+      "edit_label": "編輯標籤",
+      "copy_rect": "複製矩形框",
+      "delete_rect": "刪除矩形框",
+      "undo": "復原(&U)",
+      "undo_last_point": "復原最後一個點",
+      "add_rect_to_group": "新增矩形框到群組",
+      "delete_rect_from_group": "從群組刪除矩形框",
+      "group_selected_rects": "組合選取的矩形框",
+      "ungroup_selected_rects": "取消組合選取的矩形框"
+    },
+    "view_items": {
+      "next_image": "下一張影像(&N)",
+      "prev_image": "上一張影像(&P)",
+      "default_line_color": "預設線條顏色(&D)",
+      "default_fill_color": "預設填滿顏色(&F)",
+      "zoom_in": "放大(&I)",
+      "zoom_out": "縮小(&O)",
+      "original_size": "原始大小(&O)",
+      "fit_window": "符合視窗(&F)",
+      "fit_width": "符合寬度(&W)",
+      "brightness": "亮度"
+    },
+    "help_items": {
+      "tutorial": "教學(&T)",
+      "pypi_page": "PyPI 頁面(&P)",
+      "github_repo": "GitHub 儲存庫(&G)",
+      "about": "關於(&A)"
+    }
+  },
+  
+  "toolbar": {
+    "previous": "上一張影像",
+    "next": "下一張影像",
+    "open": "開啟",
+    "open_dir": "開啟目錄",
+    "verify": "驗證影像",
+    "save": "儲存",
+    "create": "建立矩形框",
+    "delete": "刪除矩形框",
+    "edit": "編輯矩形框",
+    "copy": "複製矩形框",
+    "shape_line_color": "形狀線條顏色",
+    "shape_fill_color": "形狀填滿顏色",
+    "advanced_mode": "進階模式",
+    "beginner_mode": "初學者模式",
+    "fit_window": "符合視窗",
+    "fit_width": "符合寬度",
+    "brightness": "亮度"
+  },
+  
+  "dialogs": {
+    "new_project": {
+      "title": "新增專案",
+      "edit_title": "編輯專案",
+      "project_info": "專案資訊",
+      "project_name": "專案名稱：",
+      "project_name_placeholder": "輸入專案名稱",
+      "project_dir": "專案目錄：",
+      "project_dir_placeholder": "選擇專案目錄",
+      "browse": "瀏覽...",
+      "labels": "標籤",
+      "label_info": "為專案新增標籤。您可以逐個新增或從 Excel 貼上多個標籤。",
+      "label_hint": "輸入標籤（按 Enter 鍵新增）",
+      "label_input_placeholder": "輸入標籤並按 Enter...",
+      "add_label": "新增",
+      "remove_label": "移除",
+      "clear_labels": "清空全部",
+      "batch_add": "批次新增",
+      "load_labels": "從檔案載入",
+      "format": "輸出格式",
+      "format_voc": "PASCAL VOC (.xml)",
+      "format_yolo": "YOLO (.txt)",
+      "format_createml": "Create ML (.json)",
+      "create": "建立專案",
+      "save": "儲存變更"
+    },
+    
+    "edit_project": {
+      "title": "⚠️ 編輯專案",
+      "warning_msg": "編輯專案設定可能會導致以下問題：\n• 修改輸出路徑：需要遷移現有標註檔案\n• 修改輸出格式：需要轉換標註檔案格式\n• 修改標籤清單：可能導致標籤不匹配",
+      "backup_recommendation": "建議在編輯前備份專案！",
+      "continue_question": "是否繼續編輯？"
+    },
+    
+    "label": {
+      "title": "輸入物件標籤",
+      "default_title": "標籤對話框",
+      "prompt": "物件標籤："
+    },
+    
+    "color": {
+      "title": "選擇顏色",
+      "line_color": "線條顏色",
+      "fill_color": "填滿顏色"
+    },
+    
+    "file_dialog": {
+      "open_image": "開啟影像",
+      "open_dir": "開啟目錄",
+      "select_project_dir": "選擇專案目錄",
+      "save_annotation": "儲存標註",
+      "save_annotation_as": "另存標註",
+      "load_labels": "從檔案載入標籤",
+      "image_files": "影像檔案",
+      "all_files": "所有檔案"
+    }
+  },
+  
+  "panels": {
+    "output_settings": "輸出設定",
+    "output_path": "輸出路徑：",
+    "output_format": "輸出格式：",
+    "not_set": "未設定",
+    "default_label": "使用預設標籤",
+    "difficult": "困難",
+    "labels": "標籤",
+    "files": "檔案",
+    "light": "亮度",
+    "zoom": "縮放"
+  },
+  
+  "messages": {
+    "welcome": "歡迎使用 {app_name}",
+    "saving": "儲存中...",
+    "saved": "已儲存：{path}",
+    "loading": "載入中...",
+    "loaded": "已載入：{path}",
+    "no_open_project": "目前沒有開啟的專案。請先建立或開啟一個專案。",
+    "no_open_project_1": "請建立新專案或開啟現有專案。",
+    "no_open_project_2": "前往 專案 → 新增專案 開始使用。",
+    "no_open_project_3": "未開啟專案",
+    "project_created": "專案 \"{name}\" 建立成功！",
+    "project_updated": "專案 \"{name}\" 已成功更新！",
+    "project_loaded": "專案已載入：{name}",
+    "error": {
+      "title": "錯誤",
+      "load_failed": "載入失敗：{path}",
+      "save_failed": "儲存失敗：{path}",
+      "invalid_format": "無效的檔案格式：{format}",
+      "file_not_found": "檔案未找到：{path}",
+      "create_project_failed": "建立專案失敗：{error}",
+      "update_project_failed": "更新專案失敗：{error}",
+      "load_label_failed": "載入標籤檔案失敗：{error}"
+    },
+    "warning": {
+      "title": "警告",
+      "unsaved_changes": "您有未儲存的變更。關閉前是否儲存？",
+      "label_exists": "標籤 '{label}' 已存在！",
+      "migration_title": "🔄 遷移標註檔案",
+      "config_changed": "偵測到設定變更：",
+      "annotations_found": "找到 {count} 個標註檔案",
+      "choose_action": "請選擇處理方式：",
+      "copy_keep": "複製檔案（保留原始檔案作為備份）",
+      "move_delete": "移動檔案（驗證後刪除原始檔案）",
+      "skip": "跳過遷移（需要手動處理）"
+    },
+    "success": {
+      "title": "成功",
+      "migration_complete": "遷移完成",
+      "migrated": "成功{mode} {count} 個標註檔案",
+      "converted": "其中 {count} 個需要進行格式轉換",
+      "manual_check": "建議手動檢查轉換後的檔案",
+      "from": "從：",
+      "to": "到：",
+      "original_kept": "原始檔案已作為備份保留。",
+      "original_deleted": "原始檔案已被刪除。請檢查新目錄中的檔案！"
+    },
+    "info": {
+      "no_annotations": "在 {path} 中未找到標註檔案",
+      "migration_failed": "遷移失敗：{error}"
+    }
+  },
+  
+  "actions": {
+    "use_default_label": "使用預設標籤",
+    "use_difficult": "困難",
+    "expert_mode": "專家模式",
+    "beginner_mode": "初學者模式"
+  },
+  
+  "status": {
+    "ready": "就緒",
+    "saving": "儲存中...",
+    "loading": "載入中...",
+    "annotating": "標註中：{filename}"
+  },
+  
+  "shortcuts": {
+    "previous": "上一張：A 或左箭頭",
+    "next": "下一張：D 或右箭頭",
+    "verify": "驗證：空白鍵",
+    "save": "儲存：Ctrl+S",
+    "create": "建立：W",
+    "edit": "編輯：Ctrl+J",
+    "delete": "刪除：Delete",
+    "copy": "複製：Ctrl+C / Ctrl+V",
+    "undo": "復原：Ctrl+Z",
+    "zoom_in": "放大：Ctrl++",
+    "zoom_out": "縮小：Ctrl+-",
+    "fit_window": "符合視窗：Ctrl+F",
+    "toggle_toolbar": "切換工具列：Ctrl+T"
+  },
+  
+  "help": {
+    "tutorial": "<p>閱讀我們的<b><a href='{url}'>教學</a></b>取得詳細說明。</p>",
+    "shortcuts_title": "鍵盤快速鍵",
+    "about_title": "關於 LabelCraft",
+    "about_text": "<h3>LabelCraft {version}</h3><p>基於 labelImg 的現代化圖形影像標註工具。</p><p>授權條款：MIT</p><p>GitHub：<a href='{github}'>{github}</a></p>"
+  },
+  
+  "export": {
+    "format_voc": "PASCAL VOC",
+    "format_yolo": "YOLO",
+    "format_createml": "Create ML",
+    "export_success": "匯出成功：{path}",
+    "export_failed": "匯出失敗：{error}"
+  },
+  
+  "common": {
+    "ok": "確定",
+    "cancel": "取消",
+    "yes": "是",
+    "no": "否",
+    "close": "關閉",
+    "save": "儲存",
+    "delete": "刪除",
+    "edit": "編輯",
+    "create": "建立",
+    "copy": "複製",
+    "move": "移動",
+    "skip": "跳過",
+    "from": "從：",
+    "to": "到：",
+    "recommendations": "建議"
+  }
+}

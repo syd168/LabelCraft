@@ -126,7 +126,7 @@ class I18nEngine(QObject):
         
         return available
     
-    def tr(self, key: str, **kwargs) -> str:
+    def tr(self, key: str, default: str = None, **kwargs) -> str:
         """
         Translate a string with parameter interpolation.
         
@@ -134,9 +134,11 @@ class I18nEngine(QObject):
             i18n.tr('menu.file.open')
             i18n.tr('message.welcome', name='John', count=5)
             i18n.tr('html.rich_text')  # Returns HTML formatted text
+            i18n.tr('optional.key', default='Fallback Text')
         
         Args:
             key: Translation key (dot-separated, e.g., "menu.file.open")
+            default: Default value if key not found
             **kwargs: Parameters for interpolation
         
         Returns:
@@ -149,9 +151,12 @@ class I18nEngine(QObject):
         if text is None and self.current_language != self.fallback_language:
             text = self._get_translation(key, self.fallback_language)
         
-        # If still not found, return the key itself
+        # If still not found, use default or return the key itself
         if text is None:
-            return f"[MISSING: {key}]"
+            if default is not None:
+                text = default
+            else:
+                return f"[MISSING: {key}]"
         
         # Parameter interpolation: {name} -> value
         if kwargs:
