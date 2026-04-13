@@ -27,11 +27,17 @@ class ColorDialog(QColorDialog):
         if parent and hasattr(parent, 'i18n'):
             parent.i18n.language_changed.connect(self.retranslate)
     
-    def get_str(self, str_id):
-        """Get translated string from parent window"""
-        if self.parent_window and hasattr(self.parent_window, 'get_str'):
-            return self.parent_window.get_str(str_id)
-        return str_id
+    def tr(self, key: str, default: str = None, **kwargs):
+        """
+        Translate a string - standard i18n method name (Qt convention).
+        Delegates to parent window's translation system.
+        """
+        if self.parent_window and hasattr(self.parent_window, 'tr'):
+            return self.parent_window.tr(key, default=default, **kwargs)
+        return default if default is not None else key
+    
+    # Alias for backward compatibility
+    get_str = tr
     
     def retranslate(self):
         """Retranslate UI elements when language changes"""

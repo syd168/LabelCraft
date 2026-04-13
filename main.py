@@ -806,16 +806,38 @@ class MainWindow(QMainWindow, WindowMixin):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
     def get_str(self, str_id):
-        """Get translated string by ID (uses old StringBundle as primary, new i18n as fallback)"""
+        """
+        Get translated string by ID (uses old StringBundle as primary, new i18n as fallback).
+        This is an alias for tr() to maintain backward compatibility.
+        """
+        return self.tr(str_id)
+    
+    def tr(self, key: str, default: str = None, **kwargs):
+        """
+        Translate a string - standard i18n method name (Qt convention).
+        
+        Usage:
+            self.tr('menu.file.open')
+            self.tr('message.welcome', app_name='LabelCraft')
+            self.tr('optional.key', default='Fallback Text')
+        
+        Args:
+            key: Translation key
+            default: Default value if key not found
+            **kwargs: Parameters for interpolation
+        
+        Returns:
+            Translated string
+        """
         # Try old string bundle first (has all existing translations)
         try:
-            return self.string_bundle.get_string(str_id)
+            return self.string_bundle.get_string(key)
         except:
             # Fallback to new i18n engine
             try:
-                return self.i18n.tr(str_id)
+                return self.i18n.tr(key, default=default, **kwargs)
             except:
-                return f"[MISSING: {str_id}]"
+                return f"[MISSING: {key}]"
     
     def on_language_changed(self, lang_code: str):
         """
