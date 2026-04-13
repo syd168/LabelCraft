@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import codecs
+import json
 import os.path
 import platform
 import shutil
@@ -3412,13 +3413,11 @@ class MainWindow(QMainWindow, WindowMixin):
             return
         
         # Show warning about editing project
+        warning_msg = self.get_str('editProjectWarningMsg')
         reply = QMessageBox.warning(
             self,
             self.get_str('editProjectWarningTitle'),
-            self.get_str('editProjectWarningMsg') + '\n\n' +
-            '• ' + self.get_str('editProjectWarningMsg').split('\n')[1] + '\n' +
-            '• ' + self.get_str('editProjectWarningMsg').split('\n')[2] + '\n' +
-            '• ' + self.get_str('editProjectWarningMsg').split('\n')[3] + '\n\n' +
+            warning_msg + '\n\n' +
             self.get_str('backupRecommendation2') + '\n\n' +
             self.get_str('continueEditQuestion'),
             QMessageBox.Yes | QMessageBox.No,

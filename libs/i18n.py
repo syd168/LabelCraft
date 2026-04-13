@@ -81,6 +81,18 @@ class StringBundle:
                     key_value = line.split(PROP_SEPERATOR)
                     key = key_value[0].strip()
                     value = PROP_SEPERATOR.join(key_value[1:]).strip().strip('"')
+                    # Decode escape sequences (\n, \t, \\, etc.)
+                    value = self.__decode_escape_sequences(value)
                     self.id_to_message[key] = value
 
                 f.close()
+    
+    def __decode_escape_sequences(self, s):
+        """Decode common escape sequences in properties files"""
+        # Replace literal \n with actual newline
+        s = s.replace('\\n', '\n')
+        # Replace literal \t with actual tab
+        s = s.replace('\\t', '\t')
+        # Replace literal \\ with single backslash
+        s = s.replace('\\\\', '\\')
+        return s

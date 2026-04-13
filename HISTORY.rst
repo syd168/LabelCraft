@@ -1,5 +1,14 @@
 History
 
+1.8.16 (2026-04-13)
+-------------------
+
+* Fixed IndexError when editing project configuration
+* Enhanced i18n module: Added escape sequence decoding for properties files
+* Fixed multi-line string parsing in resource files (\n, \t, \\)
+* Optimized project edit warning dialog display logic
+* Improved code robustness and maintainability
+
 1.8.15 (2026-04-12)
 -------------------
 
