@@ -3746,19 +3746,12 @@ class MainWindow(QMainWindow, WindowMixin):
                 # Load the project
                 self.load_project(project)
                 
-                print(f'New project created:')
-                print(f'  Project file: {project.project_file}')
-                print(f'  project_dir (database): {project.project_dir}')
-                print(f'  annotation_dir: {project.annotation_dir}')
-                print(f'  images_dir: {os.path.join(project.project_dir, "images")}')
-                
+                # Show success message with project info
                 QMessageBox.information(
                     self,
                     self.get_str('successTitle'),
-                    self.get_str('projectCreatedSuccess2').format(project.name) + '\n\n'
-                    f'{self.get_str("projectLocation2")} {project_dir}\n'
-                    f'{self.get_str("projectFile2")} {project_file}\n\n'
-                    f'{project.get_info_summary()}'
+                    self.get_str('projectCreatedSuccess2').format(project.name) + '\n\n' +
+                    project.get_info_summary()
                 )
                 
             except Exception as e:

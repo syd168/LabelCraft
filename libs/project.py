@@ -111,12 +111,18 @@ class Project:
     
     def get_info_summary(self):
         """Get a human-readable summary of the project"""
+        # Truncate labels for display
+        if len(self.labels) <= 5:
+            labels_str = ', '.join(self.labels)
+        else:
+            labels_str = ', '.join(self.labels[:5]) + '...'
+        
         return (
-            f"Project: {self.name}\n"
-            f"Location: {self.project_dir}\n"
-            f"Annotations: {self.annotation_dir}\n"
-            f"Labels: {len(self.labels)} ({', '.join(self.labels[:5])}{'...' if len(self.labels) > 5 else ''})\n"
-            f"Format: {self.format}"
+            f"{self.tr('projectName')}: {self.name}\n"
+            f"{self.tr('projectLocation')}: {self.project_dir}\n"
+            f"{self.tr('annotationDir')}: {self.annotation_dir or self.tr('notSet')}\n"
+            f"{self.tr('labelCount')}: {len(self.labels)} ({labels_str})\n"
+            f"{self.tr('outputFormat')}: {self.format}"
         )
 
 
