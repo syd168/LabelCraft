@@ -1531,9 +1531,6 @@ class MainWindow(QMainWindow, WindowMixin):
         """Change the application language (uses new i18n engine)"""
         # Use new i18n engine for dynamic switching
         self.i18n.set_language(locale)
-        
-        # Also update old string bundle for backward compatibility
-        self.string_bundle = StringBundle.get_bundle(locale)
 
         # Update menu titles
         self.menus.file.setTitle(self.get_str('menu_file'))
