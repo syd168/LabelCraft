@@ -4,6 +4,7 @@ include LICENSE
 include README.rst
 
 include resources.qrc
+include labelcraft_ui.py
 
 recursive-include data *
 recursive-include resources *

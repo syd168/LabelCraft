@@ -113,7 +113,7 @@ setup(
     author_email='syd168@users.noreply.github.com',
     url='https://github.com/syd168/LabelCraft',
     python_requires=REQUIRES_PYTHON,
-    py_modules=['main', 'resources'],
+    py_modules=['main', 'labelcraft_ui', 'resources'],
     packages=required_packages,
     entry_points={
         'gui_scripts': [
