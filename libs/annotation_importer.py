@@ -817,6 +817,8 @@ class AnnotationImporter:
         
         # Get classes list - prioritize project labels over source labels
         # This ensures imported annotations match the project's label definitions
+        labels_added_to_project = False
+        
         if self.current_project.labels:
             # Project has defined labels, use them (most important)
             classes_list = self.current_project.labels
@@ -828,10 +830,18 @@ class AnnotationImporter:
                 print(f"Imported annotations will be mapped to project labels by class ID.")
                 print(f"This may cause incorrect labels if the class order differs!")
         elif yolo_labels:
-            # No project labels, use YOLO labels from data.yaml
+            # No project labels, use YOLO labels from data.yaml AND add them to project
             classes_list = yolo_labels
-            print(f"Using {len(classes_list)} classes from YOLO data.yaml: {classes_list[:5]}...")
-            print(f"Tip: Consider adding these labels to your project for consistency.")
+            print(f"Project has no labels. Using {len(classes_list)} classes from YOLO data.yaml: {classes_list[:5]}...")
+            
+            # Automatically add these labels to the project
+            try:
+                self.current_project.labels = classes_list.copy()
+                self.current_project.save()  # Save project to persist labels
+                labels_added_to_project = True
+                print(f"✓ Added {len(classes_list)} labels to project automatically")
+            except Exception as e:
+                print(f"Warning: Failed to add labels to project: {e}")
         else:
             # No labels available at all
             classes_list = []

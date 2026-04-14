@@ -4896,7 +4896,23 @@ class MainWindow(QMainWindow, WindowMixin):
             print(f"Using {len(classes_list)} classes from label history")
         else:
             classes_list = []
-            print("Warning: No classes list available. YOLO/COCO export may fail.")
+            print("Warning: No classes list available.")
+            
+            # For YOLO and COCO formats, show warning and ask user to continue
+            if selected_format[0] in [LabelFileFormat.YOLO, LabelFileFormat.COCO]:
+                reply = QMessageBox.warning(
+                    self,
+                    self.get_str('warningTitle'),
+                    f'{self.get_str("exportNoLabelsWarning")}\n\n'
+                    f'Project has no defined labels. Export to {selected_format[0].name} format requires labels.\n\n'
+                    f'Options:\n'
+                    f'1. Add labels to project first (recommended)\n'
+                    f'2. Continue with empty labels (annotations will use numeric IDs)',
+                    QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok,
+                    QMessageBox.StandardButton.Cancel
+                )
+                if reply == QMessageBox.StandardButton.Cancel:
+                    return
         
         try:
             # Iterate through all annotation files
