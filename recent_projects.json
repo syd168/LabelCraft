@@ -1,5 +1,10 @@
 [
   {
+    "name": "red",
+    "path": "/home/syd168/Downloads/datasets/train/red.labelcraft",
+    "opened_at": "2026-04-14T15:22:48.707196"
+  },
+  {
     "name": "good",
     "path": "/home/syd168/temp/good/good.labelcraft",
     "opened_at": "2026-04-14T12:23:04.731871"
