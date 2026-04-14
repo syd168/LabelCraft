@@ -115,6 +115,9 @@ setup(
     python_requires=REQUIRES_PYTHON,
     py_modules=['main', 'labelcraft_ui', 'resources'],
     packages=required_packages,
+    package_data={
+        '': ['locales/*.json'],  # Include locale files
+    },
     entry_points={
         'gui_scripts': [
             'labelcraft=main:main',
