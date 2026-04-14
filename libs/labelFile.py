@@ -12,6 +12,7 @@ from libs.pascal_voc_io import XML_EXT
 from libs.yolo_io import YOLOWriter
 from libs.coco_io import COCOWriter
 from libs.csv_io import CSVWriter
+from libs.json_io import LabelCraftJSONWriter, LabelCraftJSONReader
 
 
 class LabelFileFormat(Enum):
@@ -20,6 +21,7 @@ class LabelFileFormat(Enum):
     CREATE_ML = 3
     COCO = 4
     CSV = 5
+    LABELCRAFT_JSON = 6  # Custom JSON format
 
 
 class LabelFileError(Exception):
@@ -68,15 +70,13 @@ class LabelFile(object):
         image_shape = [image.height(), image.width(),
                        1 if image.isGrayscale() else 3]
         
-        # Use relative path for better portability
-        # Calculate relative path from annotation file to image file
-        anno_dir = os.path.dirname(os.path.abspath(filename))
-        img_abs_path = os.path.abspath(image_path)
-        try:
-            relative_img_path = os.path.relpath(img_abs_path, anno_dir)
-        except ValueError:
-            # On Windows, relpath fails if paths are on different drives
-            relative_img_path = img_file_name
+        # Use fixed relative path for standard project structure
+        # Project structure:
+        #   project_root/
+        #     ├── images/       (image files)
+        #     └── annotations/  (annotation files)
+        # From annotations/xxx.xml to images/xxx.jpg = ../images/xxx.jpg
+        relative_img_path = os.path.join('..', 'images', img_file_name)
         
         writer = PascalVocWriter(img_folder_name, img_file_name,
                                  image_shape, local_img_path=relative_img_path)
@@ -147,12 +147,8 @@ class LabelFile(object):
         image_shape = [image.height(), image.width(),
                        1 if image.isGrayscale() else 3]
         
-        anno_dir = os.path.dirname(os.path.abspath(filename))
-        img_abs_path = os.path.abspath(image_path)
-        try:
-            relative_img_path = os.path.relpath(img_abs_path, anno_dir)
-        except ValueError:
-            relative_img_path = img_file_name
+        # Use fixed relative path for standard project structure
+        relative_img_path = os.path.join('..', 'images', img_file_name)
         
         writer = COCOWriter(img_folder_name, img_file_name,
                            image_shape, filename, local_img_path=relative_img_path)
@@ -183,15 +179,43 @@ class LabelFile(object):
         image_shape = [image.height(), image.width(),
                        1 if image.isGrayscale() else 3]
         
-        anno_dir = os.path.dirname(os.path.abspath(filename))
-        img_abs_path = os.path.abspath(image_path)
-        try:
-            relative_img_path = os.path.relpath(img_abs_path, anno_dir)
-        except ValueError:
-            relative_img_path = img_file_name
+        # Use fixed relative path for standard project structure
+        relative_img_path = os.path.join('..', 'images', img_file_name)
         
         writer = CSVWriter(img_folder_name, img_file_name,
                           image_shape, filename, local_img_path=relative_img_path)
+        writer.verified = self.verified
+        
+        for shape in shapes:
+            points = shape['points']
+            label = shape['label']
+            difficult = int(shape['difficult'])
+            bnd_box = LabelFile.convert_points_to_bnd_box(points)
+            writer.add_bnd_box(bnd_box[0], bnd_box[1], bnd_box[2], bnd_box[3], label, difficult)
+        
+        writer.write(target_file=filename)
+        return
+    
+    def save_json_format(self, filename, shapes, image_path, image_data, class_list=None,
+                         line_color=None, fill_color=None, database_src=None):
+        """Save annotations in LabelCraft JSON format"""
+        img_folder_path = os.path.dirname(image_path)
+        img_folder_name = os.path.split(img_folder_path)[-1]
+        img_file_name = os.path.basename(image_path)
+        
+        if isinstance(image_data, QImage):
+            image = image_data
+        else:
+            image = QImage()
+            image.load(image_path)
+        image_shape = [image.height(), image.width(),
+                       1 if image.isGrayscale() else 3]
+        
+        # Use fixed relative path for standard project structure
+        relative_img_path = os.path.join('..', 'images', img_file_name)
+        
+        writer = LabelCraftJSONWriter(img_folder_name, img_file_name,
+                                      image_shape, filename, local_img_path=relative_img_path)
         writer.verified = self.verified
         
         for shape in shapes:

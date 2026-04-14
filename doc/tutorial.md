@@ -1,399 +1,699 @@
-# LabelCraft User Tutorial
+# LabelCraft User Tutorial (v2.0.0)
 
-> **An image annotation tool developed based on [labelImg](https://github.com/tzutalin/labelImg)**
+> **Project-Based Image Annotation Tool** - Developed based on [labelImg](https://github.com/tzutalin/labelImg)
 
 ## 📖 Table of Contents
 
-1. [Quick Start](#quick-start)
-2. [Interface Overview](#interface-overview)
-3. [Basic Operations](#basic-operations)
-4. [Advanced Features](#advanced-features)
-5. [Keyboard Shortcuts](#keyboard-shortcuts)
-6. [FAQ](#faq)
+1. [Introduction](#introduction)
+2. [Quick Start](#quick-start)
+3. [Understanding Projects](#understanding-projects)
+4. [Creating Your First Project](#creating-your-first-project)
+5. [Annotation Workflow](#annotation-workflow)
+6. [Advanced Features](#advanced-features)
+7. [Format Conversion](#format-conversion)
+8. [Keyboard Shortcuts](#keyboard-shortcuts)
+9. [Best Practices](#best-practices)
+10. [FAQ](#faq)
+
+---
+
+## Introduction
+
+LabelCraft v2.0.0 is a professional image annotation tool designed for object detection and computer vision tasks. Unlike traditional tools, LabelCraft uses a **project-based workflow** that helps you organize annotations efficiently.
+
+### What's New in v2.0?
+
+- ✅ **Project Management**: Organize annotations into projects with metadata
+- ✅ **Multi-Format Support**: 5 formats (VOC, YOLO, CreateML, COCO, CSV)
+- ✅ **Built-in Converter**: Convert between all formats seamlessly
+- ✅ **Dynamic Language Switching**: 6 languages without restart
+- ✅ **Enhanced UI**: Better organization and usability
+- ✅ **Smart Workflow**: Pending queue, verification mode, auto-save
 
 ---
 
 ## Quick Start
 
-### Launch Application
+### Installation
 
-**Linux/macOS:**
 ```bash
-./start.sh
+pip install labelcraft
 ```
 
-**Windows:**
+### Launch
+
 ```bash
-start.bat
+labelcraft
 ```
 
-**Or run directly:**
+Or from source:
 ```bash
-python main.py
+./start.sh  # Linux/macOS
+start.bat   # Windows
 ```
-
-> **Tip**: LabelCraft is developed based on labelImg and retains the original command-line startup method.
-
-### First Time Use
-
-1. **Open Image**: Click `File → Open` or press `Ctrl+O`
-2. **Create Bounding Box**: Click the "Create RectBox" button on the toolbar or press `W`
-3. **Enter Label**: Type the object category name in the dialog box
-4. **Save Annotation**: Click `File → Save` or press `Ctrl+S`
 
 ---
 
-## Interface Overview
+## Understanding Projects
 
-### Main Interface Layout
+### What is a Project?
+
+A **Project** in LabelCraft is a container that organizes your annotation work. It includes:
+
+- **Project File** (`.labelcraft`): Stores configuration (name, labels, format, etc.)
+- **Annotations Directory**: Contains all annotation files
+- **Images**: Your image files (can be anywhere)
+- **Metadata**: Creation date, last modified, statistics
+
+### Why Use Projects?
+
+✅ **Organization**: Keep related annotations together  
+✅ **Persistence**: Settings saved automatically  
+✅ **Portability**: Easy to share and backup  
+✅ **Tracking**: Monitor progress and statistics  
+✅ **Flexibility**: Change formats mid-project  
+
+### Project Structure
 
 ```
-┌─────────────────────────────────────────────┐
-│  Menu Bar (File/Edit/View/Language/Help)     │
-├──────────┬──────────────────────┬───────────┤
-│          │                      │           │
-│ Toolbar  │                      │ Bounding  │
-│          │   Image Display      │ Box List  │
-│          │       Area           │           │
-│          │                      │ □ Use     │
-│          │                      │   Default │
-│          │                      │   Label   │
-│          │                      │           │
-│          │                      │ □ Mark as │
-│          │                      │  Difficult│
-│          │                      │           │
-├──────────┴──────────────────────┴───────────┤
-│  Status Bar (Shows current status and tips)  │
-└─────────────────────────────────────────────┘
+MyProject/
+├── MyProject.labelcraft      # Project configuration file
+├── annotations/               # All annotation files
+│   ├── image1.xml
+│   ├── image2.xml
+│   └── ...
+└── images/                    # Your images (optional location)
+    ├── image1.jpg
+    ├── image2.jpg
+    └── ...
 ```
-
-### Right Panel Description
-
-#### Bounding Box List
-- Displays all created bounding boxes in the current image
-- Each box has a checkbox to control visibility
-- Double-click to edit label name
-- Right-click to delete or edit
-
-#### Use Default Label
-- When checked, no label input dialog appears when creating new boxes
-- Automatically uses the label selected in the dropdown
-- Ideal for batch annotating objects of the same category
-
-#### Mark as Difficult
-- Marks objects that are hard to identify or uncertain
-- Adds `<difficult>1</difficult>` to the XML file after saving
-- Can choose to exclude these samples during training
 
 ---
 
-## Basic Operations
+## Creating Your First Project
 
-### 1. Open Images
+### Step 1: Open New Project Dialog
 
-**Single Image:**
-- Menu: `File → Open`
-- Shortcut: `Ctrl+O`
-- Supported formats: JPG, PNG, BMP, TIFF, etc.
+**Method 1:** Menu → `File` → `New Project`  
+**Method 2:** Keyboard shortcut `Ctrl+N`  
+**Method 3:** Click "New Project" button on toolbar
 
-**Entire Folder:**
-- Menu: `File → Open Dir`
-- Shortcut: `Ctrl+U`
-- Automatically loads all images in the directory
+### Step 2: Fill Project Information
 
-### 2. Create Bounding Boxes
+The New Project dialog will appear:
 
-**Steps:**
-1. Ensure you're in "Create Mode" (first toolbar button is highlighted)
-2. Click and drag on the image with left mouse button
-3. Release mouse and enter label name
-4. Press Enter to confirm
+#### Project Name
+- Enter a descriptive name for your project
+- Example: "Cat_Dog_Detection", "Vehicle_Annotation"
 
-**Tips:**
-- Hold `Ctrl` key to draw perfect squares
-- Use arrow keys to fine-tune box position
-- Use mouse wheel to zoom in/out
+#### Project Location
+- Choose where to store the project
+- Click "Browse" to select a directory
+- The system will create:
+  - Project file: `{name}.labelcraft`
+  - Annotations folder: `annotations/`
 
-### 3. Edit Bounding Boxes
+#### Output Format
+Choose your annotation format:
 
-**Move Box:**
-- Switch to "Edit Mode" (shortcut `Ctrl+J`)
-- Drag the box to a new position
+| Format | Extension | Use Case |
+|--------|-----------|----------|
+| **PASCAL VOC** | `.xml` | Faster R-CNN, SSD, most frameworks |
+| **YOLO** | `.txt` | YOLOv5, YOLOv8, YOLOv10 |
+| **CreateML** | `.json` | Apple CreateML framework |
+| **COCO** | `.json` | Microsoft COCO standard |
+| **CSV** | `.csv` | Data analysis, spreadsheets |
+
+> 💡 **Tip**: You can change this later! Annotations will be converted automatically.
+
+#### Labels (Categories)
+Add your object categories:
+
+1. Type a label name in the input box
+2. Click "Add" or press Enter
+3. Repeat for all categories
+
+Example labels for pet detection:
+```
+cat
+dog
+bird
+rabbit
+```
+
+**Optional:**
+- **Load from file**: Click "Load Labels" to import from a text file
+- **Clear all**: Remove all labels and start over
+
+### Step 3: Create Project
+
+Click the **"Create Project"** button.
+
+You'll see a success message with project details:
+```
+Project "MyProject" created successfully!
+
+Project Name: MyProject
+Location: /path/to/MyProject
+Annotation Directory: /path/to/MyProject/annotations
+Labels: 4 (cat, dog, bird, rabbit)
+Output Format: PASCAL_VOC
+```
+
+The main window title updates to show: `LabelCraft - MyProject`
+
+---
+
+## Annotation Workflow
+
+### Step 1: Add Images to Project
+
+After creating a project, you need to add images:
+
+**Method 1: Open Directory**
+1. Menu → `File` → `Open Dir` or `Ctrl+U`
+2. Select the folder containing your images
+3. All supported images (JPG, PNG, BMP, etc.) load automatically
+
+**Method 2: Drag & Drop**
+- Simply drag image files from your file manager
+- Drop them onto the LabelCraft window
+
+**Method 3: Add Individual Files**
+- Menu → `File` → `Add Images`
+- Select specific image files
+
+The left panel shows the **Pending Queue** - images waiting to be annotated.
+
+### Step 2: Start Annotating
+
+#### Create Bounding Box
+
+1. Ensure you're in **Create Mode** (first toolbar button highlighted)
+2. Press `W` or click "Create RectBox"
+3. Click and drag on the image to draw a box around the object
+4. Release the mouse button
+
+#### Enter Label
+
+A dialog appears asking for the label:
+
+**Option A: Type Manually**
+- Type the object category
+- Press Enter or click OK
+
+**Option B: Use Default Label**
+1. Check "Use Default Label" checkbox (right panel)
+2. Select a label from the dropdown
+3. No dialog appears - uses selected label automatically
+4. Great for batch annotating same-category objects
+
+#### Adjust the Box
+
+**Move:**
+- Switch to Edit Mode (`Ctrl+J`)
+- Drag the box to new position
 
 **Resize:**
-- In edit mode, drag edges or corners of the box
+- In Edit Mode, drag edges or corners
 
-**Modify Label:**
-- Double-click the label name in the box list
-- Or double-click the box on the canvas
+**Fine-tune:**
+- Use arrow keys for pixel-perfect positioning
 
-**Delete Box:**
-- Select and press `Delete` key
-- Or right-click in the list and select delete
+### Step 3: Save Annotation
 
-### 4. Save Annotations
+**Manual Save:**
+- Press `Ctrl+S`
+- Or menu → `File` → `Save`
 
-**Save Formats:**
-- PASCAL VOC (XML) - Default format
-- YOLO (TXT) - For YOLO model training
-- CreateML (JSON) - For Apple CreateML
+**Auto-Save (Recommended):**
+- Menu → `View` → `Auto Save Mode`
+- Automatically saves when switching images
 
-**Switch Format:**
-- Menu: `File → Change Save Format`
-- Shortcut: `Ctrl+Y`
+Saved annotations appear in the right panel list.
 
-**Auto Save:**
-- Menu: `View → Auto Save Mode`
-- When enabled, automatically saves when switching to next image
+### Step 4: Verify Completion
+
+Once an image is fully annotated:
+
+1. Review all bounding boxes
+2. Press `Space` to mark as verified
+3. A ✓ appears before the filename
+4. Image moves to "Completed" list
+
+### Step 5: Navigate Between Images
+
+**Next Image:**
+- Press `D` or `→` arrow key
+- Or click "Next Image" button
+
+**Previous Image:**
+- Press `A` or `←` arrow key
+- Or click "Prev Image" button
+
+**Jump to Specific Image:**
+- Double-click any image in the file list (left panel)
+
+### Step 6: Monitor Progress
+
+Check your progress in multiple places:
+
+- **Window Title**: `LabelCraft - MyProject (5/100)`
+  - Shows current image number and total
+- **Left Panel**: Pending vs completed counts
+- **Right Panel**: Number of annotations on current image
 
 ---
 
 ## Advanced Features
 
-### 1. Load Predefined Labels
+### Editing Projects
 
-**Why Use It:**
-- Avoid manual label entry each time
-- Ensure label name consistency
-- Improve annotation efficiency
+Need to modify project settings?
 
-**How to Use:**
+1. Menu → `File` → `Edit Project` or `Ctrl+E`
+2. The dialog opens with current settings pre-filled
+3. Modify as needed:
+   - Add/remove labels
+   - Change output format
+   - Update project name
 
-**Method 1: Specify at Startup**
+**Important:** Changing output format will prompt you to migrate existing annotations.
+
+### Managing Labels
+
+#### Add Labels During Annotation
+
+Labels are automatically added to the project when you:
+- Create a new bounding box with a new label
+- Edit an existing box and change its label
+
+#### Load Labels from File
+
+1. Prepare a text file with one label per line:
+   ```txt
+   person
+   car
+   bicycle
+   motorcycle
+   ```
+
+2. In New/Edit Project dialog, click "Load Labels"
+3. Select your text file
+4. Labels populate automatically
+
+#### Remove Unused Labels
+
+1. Menu → `File` → `Edit Project`
+2. Select label in the list
+3. Click "Remove" or press Delete key
+
+> ⚠️ **Warning**: Removing labels won't delete existing annotations, but may cause inconsistencies.
+
+### Copy Previous Frame
+
+For video frames or similar consecutive images:
+
+1. Annotate first frame completely
+2. Move to next frame
+3. Menu → `File` → `Copy Previous Bounding Boxes` or `Ctrl+V`
+4. All boxes from previous frame are copied
+5. Adjust positions as needed
+
+This saves enormous time for sequential annotation!
+
+### Brightness Adjustment
+
+Having trouble seeing objects in dark/bright images?
+
+**Toolbar Slider:**
+- Drag the brightness slider on the toolbar
+
+**Keyboard Shortcuts:**
+- `Ctrl+Shift++` : Increase brightness
+- `Ctrl+Shift+-` : Decrease brightness
+- `Ctrl+Shift+=` : Reset to normal
+
+> 💡 This only affects display, not the original image!
+
+### Verification Mode
+
+Quality control is crucial:
+
+1. After annotating an image, review carefully
+2. Press `Space` to toggle verification status
+3. Verified images show ✓ in the file list
+4. Use this to track which images need review
+
+### Export Annotations
+
+Export your annotations in different formats:
+
+1. Menu → `File` → `Export Annotations` or `Ctrl+E`
+2. Choose export format
+3. Select destination directory
+4. Click "Export"
+
+All annotations will be converted and saved.
+
+---
+
+## Format Conversion
+
+### Built-in Converter
+
+LabelCraft v2.0 includes a powerful converter supporting all 5 formats.
+
+### Programmatic Usage
+
+```python
+from libs.annotation_converter import AnnotationConverter
+
+# Initialize converter
+converter = AnnotationConverter()
+
+# Convert entire directory
+converter.convert(
+    input_dir='path/to/voc_annotations',
+    input_format='voc',        # Source format
+    output_format='yolo',      # Target format
+    output_dir='path/to/yolo_output'
+)
+```
+
+**Supported Formats:**
+- `'voc'` - PASCAL VOC (XML)
+- `'yolo'` - YOLO (TXT)
+- `'createml'` - CreateML (JSON)
+- `'coco'` - COCO (JSON)
+- `'csv'` - CSV
+
+### Command-Line Usage
+
 ```bash
-python main.py data/predefined_classes.txt
+# Basic conversion
+python -m libs.annotation_converter \
+    --input /path/to/input \
+    --input_format voc \
+    --output_format yolo \
+    --output /path/to/output
+
+# With options
+python -m libs.annotation_converter \
+    --input ./voc_annotations \
+    --input_format voc \
+    --output_format coco \
+    --output ./coco_annotations \
+    --verbose
 ```
 
-**Method 2: Load at Runtime**
-- Menu: `File → Load Predefined Classes`
-- Shortcut: `Ctrl+Shift+L`
-- Select a text file containing label list
+### Common Conversion Scenarios
 
-**File Format:**
-```txt
-person
-car
-dog
-cat
+#### VOC to YOLO
+Train YOLO models with VOC-annotated data:
+```python
+converter.convert('voc_data/', 'voc', 'yolo', 'yolo_data/')
 ```
-One label per line, supports both Chinese and English.
 
-### 2. Copy Previous Frame Annotations
+#### YOLO to COCO
+Convert YOLO datasets to COCO format:
+```python
+converter.convert('yolo_dataset/', 'yolo', 'coco', 'coco_dataset/')
+```
 
-**Use Cases:**
-- Video frame annotation
-- Consecutive images where object positions don't change much
+#### Any to CSV
+Export for analysis in Excel/spreadsheets:
+```python
+converter.convert('annotations/', 'voc', 'csv', 'analysis.csv')
+```
 
-**Operation:**
-- Menu: `File → Copy Previous Bounding Boxes`
-- Shortcut: `Ctrl+V`
+### Format Details
 
-### 3. Verification Mode
+#### PASCAL VOC (XML)
+```xml
+<annotation>
+    <folder>images</folder>
+    <filename>image1.jpg</filename>
+    <size>
+        <width>1920</width>
+        <height>1080</height>
+    </size>
+    <object>
+        <name>cat</name>
+        <bndbox>
+            <xmin>100</xmin>
+            <ymin>150</ymin>
+            <xmax>300</xmax>
+            <ymax>350</ymax>
+        </bndbox>
+    </object>
+</annotation>
+```
 
-**Purpose:**
-- Review completed annotations
-- Mark verified images
+#### YOLO (TXT)
+```
+0 0.5 0.5 0.4 0.4
+1 0.7 0.3 0.2 0.3
+```
+Format: `<class_id> <x_center> <y_center> <width> <height>`
+- Values normalized to 0-1
+- One line per object
+- Class IDs start from 0
 
-**Operation:**
-- Press Space bar to toggle verification status
-- Verified images show ✓ before the filename
+#### COCO (JSON)
+```json
+{
+  "images": [
+    {"id": 1, "file_name": "image1.jpg", "width": 1920, "height": 1080}
+  ],
+  "annotations": [
+    {"id": 1, "image_id": 1, "category_id": 1, 
+     "bbox": [100, 150, 200, 200]}
+  ],
+  "categories": [
+    {"id": 1, "name": "cat"},
+    {"id": 2, "name": "dog"}
+  ]
+}
+```
 
-### 4. Brightness Adjustment
-
-**Features:**
-- Adjust image display brightness
-- Does not affect original image
-
-**Operation:**
-- Brightness slider on toolbar
-- Shortcuts: `Ctrl+Shift++` (brighten), `Ctrl+Shift+-` (darken)
-- `Ctrl+Shift+=` reset brightness
-
-### 5. Color Settings
-
-**Change Line Color:**
-- Menu: `Edit → Change Line Color`
-- Shortcut: `Ctrl+L`
-
-**Change Fill Color:**
-- Right-click on bounding box
-- Select "Choose Line Color" or "Choose Fill Color"
+#### CSV
+```csv
+filename,width,height,class,xmin,ymin,xmax,ymax
+image1.jpg,1920,1080,cat,100,150,300,350
+image1.jpg,1920,1080,dog,500,400,700,600
+```
 
 ---
 
 ## Keyboard Shortcuts
 
-### Common Shortcuts
+### Project Management
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+N` | New Project |
+| `Ctrl+O` | Open Project |
+| `Ctrl+E` | Edit Project |
+| `Ctrl+S` | Save Annotation |
+| `Ctrl+Shift+C` | Close Project |
 
-| Shortcut | Function |
-|----------|----------|
-| `Ctrl+O` | Open image |
-| `Ctrl+U` | Open directory |
-| `Ctrl+S` | Save annotation |
-| `Ctrl+Shift+S` | Save as |
-| `Ctrl+W` | Close current image |
-| `Ctrl+Q` | Quit application |
+### File Operations
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+U` | Open Directory |
+| `Ctrl+Shift+O` | Open Annotation File |
+| `Ctrl+W` | Close Current Image |
+| `Ctrl+Q` | Quit Application |
 
-### Annotation Operations
-
-| Shortcut | Function |
-|----------|----------|
-| `W` | Create bounding box |
-| `Ctrl+J` | Edit mode |
-| `Delete` | Delete selected box |
-| `Ctrl+D` | Duplicate selected box |
-| `Ctrl+E` | Edit label |
-| `Ctrl+V` | Copy previous frame annotations |
+### Annotation
+| Shortcut | Action |
+|----------|--------|
+| `W` | Create RectBox |
+| `Ctrl+J` | Toggle Edit/Create Mode |
+| `Delete` | Delete Selected Box |
+| `Ctrl+D` | Duplicate Selected Box |
+| `Ctrl+E` | Edit Label |
+| `Ctrl+V` | Copy Previous Frame |
 
 ### Navigation
-
-| Shortcut | Function |
-|----------|----------|
-| `D` or `→` | Next image |
-| `A` or `←` | Previous image |
-| `Space` | Verify/Unverify |
+| Shortcut | Action |
+|----------|--------|
+| `D` or `→` | Next Image |
+| `A` or `←` | Previous Image |
+| `Space` | Verify/Unverify Image |
+| `Home` | First Image |
+| `End` | Last Image |
 
 ### View Control
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl++` | Zoom In |
+| `Ctrl+-` | Zoom Out |
+| `Ctrl+=` | Original Size |
+| `Ctrl+F` | Fit Window |
+| `Ctrl+Shift+F` | Fit Width |
+| `Ctrl+H` | Hide All Boxes |
+| `Ctrl+A` | Show All Boxes |
 
-| Shortcut | Function |
-|----------|----------|
-| `Ctrl++` | Zoom in |
-| `Ctrl+-` | Zoom out |
-| `Ctrl+=` | Original size |
-| `Ctrl+F` | Fit window |
-| `Ctrl+Shift+F` | Fit width |
-| `Ctrl+H` | Hide all boxes |
-| `Ctrl+A` | Show all boxes |
-
-### Brightness Control
-
-| Shortcut | Function |
-|----------|----------|
-| `Ctrl+Shift++` | Brighten |
-| `Ctrl+Shift+-` | Darken |
-| `Ctrl+Shift+=` | Reset brightness |
+### Brightness
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Shift++` | Increase Brightness |
+| `Ctrl+Shift+-` | Decrease Brightness |
+| `Ctrl+Shift+=` | Reset Brightness |
 
 ### Others
-
-| Shortcut | Function |
-|----------|----------|
-| `Ctrl+Shift+A` | Advanced mode |
-| `Ctrl+R` | Change save directory |
-| `Ctrl+Shift+O` | Open annotation file |
-| `Ctrl+Shift+L` | Load label file |
-| `Ctrl+Shift+D` | Delete image |
-
----
-
-## FAQ
-
-### Q1: How to switch language?
-
-**A:** Menu `Language → Choose Language`, supports:
-- English
-- 简体中文 (Simplified Chinese)
-- 繁體中文 (Traditional Chinese)
-- 日本語 (Japanese)
-
-### Q2: Where are annotation files saved?
-
-**A:** 
-- Saved in the same directory as the image by default
-- Filename matches the image with extension `.xml` (VOC) or `.txt` (YOLO)
-- Can be changed via `File → Change Save Dir`
-
-### Q3: How to batch annotate the same category?
-
-**A:**
-1. Check "Use Default Label"
-2. Select the category from the dropdown
-3. Draw boxes directly without entering labels each time
-
-### Q4: What if I drew a bounding box incorrectly?
-
-**A:**
-- Press `Ctrl+Z` to undo (if enabled)
-- Or select and press `Delete`
-- Or right-click in the list to delete
-
-### Q5: How to check the number of annotated images?
-
-**A:**
-- Window title shows: `LabelCraft image.jpg (1/100)`
-- Numbers in parentheses are current index and total count
-- Right panel list shows all bounding boxes
-
-### Q6: What annotation formats are supported?
-
-**A:**
-- **PASCAL VOC** (XML): Universal format, supported by most frameworks
-- **YOLO** (TXT): For YOLO series models
-- **CreateML** (JSON): For Apple CreateML framework
-
-### Q7: How to handle difficult samples?
-
-**A:**
-1. Create or select a bounding box
-2. Check "Mark as Difficult" on the right panel
-3. XML will contain `<difficult>1</difficult>` after saving
-4. Can choose to ignore these samples during training
-
-### Q8: What if the image is too large/small?
-
-**A:**
-- Use `Ctrl++` / `Ctrl+-` to zoom
-- Or `Ctrl+F` to fit window
-- Or use mouse wheel to zoom
-- Hold `Ctrl` + scroll for faster zooming
-
-### Q9: How to backup annotation data?
-
-**A:**
-- Regularly copy the entire project folder
-- Or use version control system (Git)
-- Annotation files are text format, easy to manage
-
-### Q10: Will annotations be lost if the program crashes?
-
-**A:**
-- If "Auto Save Mode" is enabled, they won't be lost
-- Recommended to enable auto-save: `View → Auto Save Mode`
-- Develop the habit of frequently pressing `Ctrl+S` to save
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+T` | Toggle Toolbar |
+| `Ctrl+R` | Change Save Directory |
+| `Ctrl+Shift+L` | Load Predefined Labels |
+| `Ctrl+Shift+D` | Delete Image |
 
 ---
 
 ## Best Practices
 
-### 1. Before Annotation
+### Before Starting
 
-✅ Create predefined label file  
-✅ Set appropriate save directory  
-✅ Enable auto-save mode  
-✅ Familiarize yourself with shortcuts  
+✅ **Plan your labels**: Define all categories beforehand  
+✅ **Create a project**: Use projects for organization  
+✅ **Set correct format**: Choose format matching your training framework  
+✅ **Enable auto-save**: Prevent data loss  
+✅ **Learn shortcuts**: Boost productivity significantly  
 
-### 2. During Annotation
+### During Annotation
 
-✅ Keep label naming consistent  
-✅ Regularly check annotation quality  
-✅ Use verification mode to mark completion  
-✅ Save progress periodically  
+✅ **Consistent labeling**: Use exact same spelling for categories  
+✅ **Tight boxes**: Draw boxes tightly around objects  
+✅ **Regular verification**: Use Space to verify completed images  
+✅ **Frequent saving**: Save often, even with auto-save  
+✅ **Default labels**: Use for batch annotation of same category  
+✅ **Quality checks**: Periodically review previous annotations  
 
-### 3. After Annotation
+### After Annotation
 
-✅ Spot-check annotation quality  
-✅ Backup annotation files  
-✅ Export to required format  
-✅ Record annotation statistics  
+✅ **Verify all images**: Ensure everything is marked verified  
+✅ **Backup project**: Copy entire project directory  
+✅ **Export if needed**: Convert to required formats  
+✅ **Document statistics**: Record number of images, objects per class  
+✅ **Version control**: Use Git for project tracking  
+
+### Project Organization
+
+```
+Projects/
+├── Project_1_Cats_Dogs/
+│   ├── Project_1_Cats_Dogs.labelcraft
+│   ├── annotations/
+│   └── images/
+├── Project_2_Vehicles/
+│   ├── Project_2_Vehicles.labelcraft
+│   ├── annotations/
+│   └── images/
+└── exports/
+    ├── voc_export/
+    ├── yolo_export/
+    └── coco_export/
+```
+
+### Efficiency Tips
+
+1. **Batch Similar Images**: Group similar images together
+2. **Use Default Labels**: When annotating many objects of same type
+3. **Copy Previous Frame**: For video or similar consecutive images
+4. **Keyboard Over Mouse**: Learn and use shortcuts
+5. **Regular Breaks**: Maintain annotation quality with breaks
+6. **Progress Tracking**: Use verification mode to track completion
 
 ---
 
-## Technical Support
+## FAQ
 
-- **Project Homepage**: https://github.com/syd168/LabelCraft
-- **Original Project (labelImg)**: https://github.com/tzutalin/labelImg (Credits)
-- **Issue Reporting**: Submit via GitHub Issues
-- **Documentation**: Check project README.md
+### Q1: Can I use LabelCraft without creating a project?
+
+**A:** Yes! You can use legacy mode:
+```bash
+python main.py /path/to/images
+```
+However, projects provide better organization and are recommended.
+
+### Q2: How do I open an existing project?
+
+**A:** 
+- Menu → `File` → `Open Project` or `Ctrl+O`
+- Select the `.labelcraft` file
+- Or use recent projects list in menu
+
+### Q3: Where are my annotations saved?
+
+**A:** In the project's `annotations/` directory by default. Each annotation file has the same name as the image with appropriate extension (.xml, .txt, .json, .csv).
+
+### Q4: Can I change the output format after starting?
+
+**A:** Yes! Edit project (`Ctrl+E`) and change format. Existing annotations will be offered for migration.
+
+### Q5: How do I convert my old labelImg annotations?
+
+**A:** Use the built-in converter:
+```python
+from libs.annotation_converter import AnnotationConverter
+converter = AnnotationConverter()
+converter.convert('old_annotations/', 'voc', 'yolo', 'new_annotations/')
+```
+
+### Q6: What image formats are supported?
+
+**A:** JPG, JPEG, PNG, BMP, TIFF, WEBP, and most common image formats.
+
+### Q7: How do I backup my project?
+
+**A:** Copy the entire project directory including:
+- `.labelcraft` file
+- `annotations/` folder
+- Your images (if stored in project)
+
+### Q8: Can multiple people work on the same project?
+
+**A:** Not simultaneously. However, you can:
+1. Split images into sub-projects
+2. Have each person annotate separately
+3. Merge annotations using the converter
+
+### Q9: How do I add more labels mid-project?
+
+**A:** 
+- Just type new label names when creating boxes
+- Or edit project (`Ctrl+E`) to manage labels
+
+### Q10: Is there an undo function?
+
+**A:** Currently, deletion is immediate. Be careful when deleting. Future versions may add undo support.
+
+### Q11: How do I report bugs or request features?
+
+**A:** Visit our GitHub Issues page: https://github.com/syd168/LabelCraft/issues
+
+### Q12: Can I contribute to LabelCraft?
+
+**A:** Absolutely! We welcome contributions:
+1. Fork the repository
+2. Make your changes
+3. Submit a Pull Request
+
+See README.md for development setup instructions.
 
 ---
 
-**Happy Annotating!** 🎉
+## Getting Help
+
+- **Documentation**: Check `doc/` directory in repository
+- **Issues**: https://github.com/syd168/LabelCraft/issues
+- **Discussions**: GitHub Discussions tab
+- **Email**: syd168@users.noreply.github.com
+
+---
+
+**Happy Annotating! 🎉**
+
+*Version 2.0.0 - Made with ❤️ for the computer vision community*

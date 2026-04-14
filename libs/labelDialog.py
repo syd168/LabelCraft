@@ -15,11 +15,6 @@ class LabelDialog(QDialog):
         # Store parent reference for i18n
         self.parent_window = parent
         
-        # Load string bundle for i18n (backward compatibility)
-        self.string_bundle = None
-        if parent and hasattr(parent, 'string_bundle'):
-            self.string_bundle = parent.string_bundle
-        
         # Connect to language change signal if parent has i18n engine
         if parent and hasattr(parent, 'i18n'):
             parent.i18n.language_changed.connect(self.retranslate)
@@ -62,11 +57,6 @@ class LabelDialog(QDialog):
         """
         if self.parent_window and hasattr(self.parent_window, 'tr'):
             return self.parent_window.tr(key, default=default, **kwargs)
-        elif hasattr(self, 'string_bundle') and self.string_bundle:
-            try:
-                return self.string_bundle.get_string(key)
-            except:
-                pass
         return default if default is not None else key
     
     # Alias for backward compatibility

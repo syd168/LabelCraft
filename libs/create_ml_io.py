@@ -109,17 +109,41 @@ class CreateMLReader:
             input_data = file.read()
 
         # Returns a list
-        output_list = json.loads(input_data)
-
-        if output_list:
+        try:
+            output_list = json.loads(input_data)
+        except json.JSONDecodeError as e:
+            print(f"JSON decoding failed: {e}")
+            return
+        
+        # Validate output_list structure
+        if not isinstance(output_list, list):
+            print(f"Invalid JSON format: expected a list, got {type(output_list).__name__}")
+            return
+        
+        if len(output_list) == 0:
+            print("Warning: Empty JSON annotation file")
+            return
+        
+        # Get verified status from first item if it's a valid dict
+        if isinstance(output_list[0], dict):
             self.verified = output_list[0].get("verified", False)
+        else:
+            print(f"Warning: First element is not a dictionary, type: {type(output_list[0]).__name__}")
+            return
 
         if len(self.shapes) > 0:
             self.shapes = []
         for image in output_list:
+            if not isinstance(image, dict):
+                print(f"Warning: Skipping invalid annotation entry: {type(image).__name__}")
+                continue
+            if "image" not in image or "annotations" not in image:
+                print(f"Warning: Missing required fields in annotation entry")
+                continue
             if image["image"] == self.filename:
                 for shape in image["annotations"]:
-                    self.add_shape(shape["label"], shape["coordinates"])
+                    if "label" in shape and "coordinates" in shape:
+                        self.add_shape(shape["label"], shape["coordinates"])
 
     def add_shape(self, label, bnd_box):
         x_min = bnd_box["x"] - (bnd_box["width"] / 2)

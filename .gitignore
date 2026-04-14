@@ -40,20 +40,13 @@ Thumbs.db
 # LabelCraft specific
 *.pickle
 *.pkl
-data/predefined_classes.txt
+recent_projects.json
 
-# Build artifacts
-libs/resources.py
+# Build artifacts (generated during build)
+# Note: libs/resources.py is needed for runtime, don't ignore it
 
 # Logs
 *.log
 
-# Release notes (auto-generated)
+# Auto-generated release notes
 RELEASE_NOTES.md
-
-# Documentation (keep locally, not tracked by Git)
-doc/TRANSLATION_GUIDE.md
-doc/安装标注工具.md
-doc/打包说明.md
-
-build-tools/

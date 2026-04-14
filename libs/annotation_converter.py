@@ -334,6 +334,73 @@ class AnnotationConverter:
         }
     
     @staticmethod
+    def read_labelcraft_json(json_path):
+        """Read LabelCraft JSON format and convert to internal format"""
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Get image info
+        image_info = data.get('image', {})
+        image_path = image_info.get('path', '')
+        
+        # If path is relative, resolve it
+        if not os.path.isabs(image_path):
+            image_path = os.path.join(os.path.dirname(json_path), image_path)
+        
+        width = image_info.get('width', 0)
+        height = image_info.get('height', 0)
+        
+        # If dimensions are not available, read from image file
+        if width == 0 or height == 0:
+            from PySide6.QtGui import QImage
+            if os.path.exists(image_path):
+                img = QImage(image_path)
+                width = img.width()
+                height = img.height()
+        
+        print(f"DEBUG read_labelcraft_json: image={image_path}, size={width}x{height}")
+        
+        # Parse annotations
+        annotations = []
+        for ann in data.get('annotations', []):
+            label = ann.get('label', '')
+            
+            # Get bbox from points if bbox not directly available
+            if 'bbox' in ann:
+                bbox = ann['bbox']  # [xmin, ymin, xmax, ymax]
+                x, y, w, h = bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]
+                print(f"  Annotation: {label}, bbox=[{x},{y},{w},{h}]")
+            elif 'points' in ann and len(ann['points']) >= 4:
+                # Convert polygon points to bbox
+                points = ann['points']
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+                x = min(xs)
+                y = min(ys)
+                w = max(xs) - x
+                h = max(ys) - y
+                print(f"  Annotation: {label}, points->bbox=[{x},{y},{w},{h}]")
+            else:
+                print(f"  Skipping annotation (no bbox or points): {ann}")
+                continue
+            
+            annotations.append({
+                'label': label,
+                'bbox': [int(x), int(y), int(w), int(h)],
+                'difficult': ann.get('difficult', False),
+                'truncated': False
+            })
+        
+        print(f"DEBUG: Total annotations parsed: {len(annotations)}")
+        
+        return {
+            'image_path': image_path,
+            'image_width': width,
+            'image_height': height,
+            'annotations': annotations
+        }
+    
+    @staticmethod
     def write_voc(internal_data, output_path):
         """Write internal format to PASCAL VOC XML"""
         root = ET.Element('annotation')
@@ -410,9 +477,11 @@ class AnnotationConverter:
         height = internal_data['image_height']
         
         lines = []
+        skipped_labels = []
         for ann in internal_data['annotations']:
             label = ann['label']
             if label not in class_to_id:
+                skipped_labels.append(label)
                 print(f"Warning: Label '{label}' not in classes list, skipping")
                 continue
             
@@ -427,10 +496,16 @@ class AnnotationConverter:
             
             lines.append(f"{class_id} {x_center:.6f} {y_center:.6f} {w_norm:.6f} {h_norm:.6f}")
         
-        with open(output_path, 'w') as f:
-            f.write('\n'.join(lines))
-            if lines:
+        # Only write file if there are valid annotations
+        if lines:
+            with open(output_path, 'w') as f:
+                f.write('\n'.join(lines))
                 f.write('\n')
+            return True
+        else:
+            # Don't create empty file
+            print(f"Skipping {os.path.basename(output_path)}: all labels not in classes list {skipped_labels}")
+            return False
     
     @staticmethod
     def write_createml(internal_data, output_path):
@@ -528,16 +603,70 @@ class AnnotationConverter:
                 ])
     
     @staticmethod
+    def write_labelcraft_json(internal_data, output_path):
+        """Write internal format to LabelCraft JSON"""
+        from datetime import datetime
+        
+        # Ensure .json extension
+        if not output_path.lower().endswith('.json'):
+            output_path += '.json'
+        
+        data = {
+            'version': '1.0',
+            'image': {
+                'path': os.path.basename(internal_data['image_path']),
+                'width': internal_data['image_width'],
+                'height': internal_data['image_height'],
+                'depth': 3
+            },
+            'annotations': [],
+            'metadata': {
+                'verified': False,
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'tool': 'LabelCraft'
+            }
+        }
+        
+        # Add annotations
+        for idx, ann in enumerate(internal_data['annotations'], 1):
+            x, y, w, h = ann['bbox']
+            annotation = {
+                'id': idx,
+                'label': ann['label'],
+                'type': 'rectangle',
+                'bbox': [int(x), int(y), int(x + w), int(y + h)],
+                'points': [
+                    [int(x), int(y)],
+                    [int(x + w), int(y)],
+                    [int(x + w), int(y + h)],
+                    [int(x), int(y + h)]
+                ],
+                'difficult': ann.get('difficult', False),
+                'occluded': False
+            }
+            data['annotations'].append(annotation)
+        
+        # Write to file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        return output_path
+    
+    @staticmethod
     def convert(input_path, input_format, output_path, output_format, classes_list=None):
         """
         Convert annotation from one format to another
         
         Args:
             input_path: Path to input annotation file
-            input_format: Input format ('voc', 'yolo', 'createml', 'coco', 'csv')
+            input_format: Input format ('voc', 'yolo', 'createml', 'coco', 'csv', 'json')
             output_path: Path to output annotation file
             output_format: Output format ('voc', 'yolo', 'createml', 'coco', 'csv')
             classes_list: List of class names (required for YOLO format)
+            
+        Returns:
+            bool: True if conversion was successful and file was created
         """
         # Read input format to internal format
         readers = {
@@ -545,7 +674,8 @@ class AnnotationConverter:
             'yolo': AnnotationConverter.read_yolo,
             'createml': AnnotationConverter.read_createml,
             'coco': AnnotationConverter.read_coco,
-            'csv': AnnotationConverter.read_csv
+            'csv': AnnotationConverter.read_csv,
+            'json': AnnotationConverter.read_labelcraft_json
         }
         
         if input_format not in readers:
@@ -559,7 +689,8 @@ class AnnotationConverter:
             'yolo': AnnotationConverter.write_yolo,
             'createml': AnnotationConverter.write_createml,
             'coco': AnnotationConverter.write_coco,
-            'csv': AnnotationConverter.write_csv
+            'csv': AnnotationConverter.write_csv,
+            'json': AnnotationConverter.write_labelcraft_json
         }
         
         if output_format not in writers:
@@ -570,8 +701,12 @@ class AnnotationConverter:
             raise ValueError(f"classes_list is required for {output_format} format")
         
         if output_format == 'yolo':
-            writers[output_format](internal_data, output_path, classes_list)
+            success = writers[output_format](internal_data, output_path, classes_list)
         elif output_format == 'coco':
             writers[output_format](internal_data, output_path, classes_list)
+            success = True
         else:
             writers[output_format](internal_data, output_path)
+            success = True
+        
+        return success

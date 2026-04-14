@@ -1,8 +1,11 @@
-# Core dependencies
+# LabelCraft v2.0.0 - Core Dependencies
+# Required for running the application
 pyside6>=6.5.0
 lxml>=4.9.0
 
-# Optional dependencies for development
+# Optional dependencies for development and testing
+# Uncomment if you want to contribute or run tests
 # pytest>=7.0.0
 # black>=22.0.0
 # flake8>=5.0.0
+# twine>=4.0.0  # For PyPI publishing

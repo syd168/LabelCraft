@@ -45,8 +45,11 @@ class PascalVocWriter:
             return None
 
         top = Element('annotation')
+        # Always include verified attribute for consistency
         if self.verified:
             top.set('verified', 'yes')
+        else:
+            top.set('verified', 'no')
 
         folder = SubElement(top, 'folder')
         folder.text = self.folder_name
