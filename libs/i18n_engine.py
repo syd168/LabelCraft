@@ -27,7 +27,7 @@ class I18nEngine(QObject):
     # Signal emitted when language changes
     language_changed = Signal(str)  # emits new language code
     
-    def __init__(self, locales_dir: str = None, properties_dir: str = None):
+    def __init__(self, locales_dir: str = None):
         super().__init__()
         
         if locales_dir is None:
@@ -38,15 +38,12 @@ class I18nEngine(QObject):
             )
         
         self.locales_dir = Path(locales_dir)
-        self.properties_dir = Path(properties_dir) if properties_dir else None
         self.translations: Dict[str, Dict] = {}  # lang -> translation dict
-        self.flat_translations: Dict[str, Dict] = {}  # lang -> flat key-value pairs (from properties)
         self.current_language: str = 'en'
         self.fallback_language: str = 'en'
         
         # Load all available translations
         self._load_all_translations()
-        self._load_properties_files()
         
         # Auto-detect system language
         self._auto_detect_language()
@@ -65,52 +62,6 @@ class I18nEngine(QObject):
                 print(f"✓ Loaded translation: {lang_code}")
             except Exception as e:
                 print(f"✗ Failed to load {lang_code}: {e}")
-    
-    def _load_properties_files(self):
-        """Load properties files as fallback for flat keys."""
-        if self.properties_dir is None:
-            # Default to resources/strings directory
-            self.properties_dir = Path(
-                os.path.dirname(os.path.dirname(__file__)),
-                'resources', 'strings'
-            )
-        
-        if not self.properties_dir.exists():
-            print(f"Warning: Properties directory not found: {self.properties_dir}")
-            return
-        
-        # Map properties file names to language codes
-        file_to_lang = {
-            'strings.properties': 'en',
-            'strings-zh-CN.properties': 'zh-CN',
-            'strings-zh-TW.properties': 'zh-TW',
-            'strings-ja-JP.properties': 'ja-JP',
-            'strings-de-DE.properties': 'de-DE',
-            'strings-fr-FR.properties': 'fr-FR',
-        }
-        
-        for prop_file in self.properties_dir.glob('*.properties'):
-            lang_code = file_to_lang.get(prop_file.name)
-            if not lang_code:
-                continue
-            
-            try:
-                flat_dict = {}
-                with open(prop_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith('#'):
-                            continue
-                        if '=' in line:
-                            key, value = line.split('=', 1)
-                            # Handle \n escape sequences
-                            value = value.replace('\\n', '\n')
-                            flat_dict[key.strip()] = value.strip()
-                
-                self.flat_translations[lang_code] = flat_dict
-                print(f"✓ Loaded properties: {prop_file.name} -> {lang_code}")
-            except Exception as e:
-                print(f"✗ Failed to load properties {prop_file.name}: {e}")
     
     def _auto_detect_language(self):
         """Auto-detect system language and set it."""
@@ -186,25 +137,19 @@ class I18nEngine(QObject):
             i18n.tr('optional.key', default='Fallback Text')
         
         Args:
-            key: Translation key (dot-separated for JSON, flat for properties)
+            key: Translation key (dot-separated, e.g., "menu.file.open")
             default: Default value if key not found
             **kwargs: Parameters for interpolation
         
         Returns:
             Translated string
         """
-        # Try JSON translations first (nested keys)
+        # Get translation from current language
         text = self._get_translation(key, self.current_language)
         
-        # Fallback to properties files (flat keys)
-        if text is None:
-            text = self._get_flat_translation(key, self.current_language)
-        
-        # Fallback to English if still not found
+        # Fallback to English if not found
         if text is None and self.current_language != self.fallback_language:
             text = self._get_translation(key, self.fallback_language)
-            if text is None:
-                text = self._get_flat_translation(key, self.fallback_language)
         
         # If still not found, use default or return the key itself
         if text is None:
@@ -237,22 +182,6 @@ class I18nEngine(QObject):
             return value if isinstance(value, str) else None
         except (KeyError, TypeError):
             return None
-    
-    def _get_flat_translation(self, key: str, lang_code: str) -> Optional[str]:
-        """
-        Get translation from flat properties files.
-        
-        Args:
-            key: Flat key (e.g., "outputSettings")
-            lang_code: Language code
-        
-        Returns:
-            Translated string or None
-        """
-        if lang_code not in self.flat_translations:
-            return None
-        
-        return self.flat_translations[lang_code].get(key)
     
     def _interpolate(self, text: str, **kwargs) -> str:
         """
