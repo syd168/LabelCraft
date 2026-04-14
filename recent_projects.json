@@ -1,28 +1,13 @@
 [
   {
-    "name": "red",
-    "path": "/home/syd168/Downloads/datasets/train/red.labelcraft",
-    "opened_at": "2026-04-14T15:22:48.707196"
-  },
-  {
-    "name": "good",
-    "path": "/home/syd168/temp/good/good.labelcraft",
-    "opened_at": "2026-04-14T12:23:04.731871"
-  },
-  {
     "name": "test",
-    "path": "/home/syd168/temp/test/test.labelcraft",
-    "opened_at": "2026-04-14T12:21:05.989490"
+    "path": "/home/syd168/Downloads/datasets/train/test.labelcraft",
+    "opened_at": "2026-04-14T17:42:10.169668"
   },
   {
     "name": "t1",
     "path": "/home/syd168/temp/temp/t1.labelcraft",
     "opened_at": "2026-04-14T10:00:12.854359"
-  },
-  {
-    "name": "ttt",
-    "path": "/home/syd168/temp/temp/ttt.labelcraft",
-    "opened_at": "2026-04-14T09:00:19.763590"
   },
   {
     "name": "fgg",
@@ -33,10 +18,5 @@
     "name": "tet",
     "path": "/home/syd168/temp/temp/tet.labelcraft",
     "opened_at": "2026-04-14T07:43:10.411207"
-  },
-  {
-    "name": "test1",
-    "path": "/home/syd168/temp/temp/test1.labelcraft",
-    "opened_at": "2026-04-14T07:41:27.659791"
   }
 ]

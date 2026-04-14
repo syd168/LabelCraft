@@ -618,7 +618,7 @@ class MainWindow(QMainWindow, WindowMixin):
                               # Add missing actions for language switching
                               openDir=open_dir, changeSaveDir=change_save_dir,
                               openAnnotation=open_annotation, copyPrevBounding=copy_prev_bounding,
-                              exportAnnotations=export_annotations,
+                              importAnnotations=import_annotations, exportAnnotations=export_annotations,
                               nextImg=open_next_image, prevImg=open_prev_image,
                               verify=verify, verifyAll=verify_all, filterUnverified=filter_unverified, toggleLabels=toggle_labels,
                               setVerified=set_verified, setUnverified=set_unverified,
@@ -1575,7 +1575,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.single_class_mode.setText(self.get_str('singleClsMode'))
         self.display_label_option.setText(self.get_str('displayLabel'))
         
-        # Update export action
+        # Update import and export actions
+        if hasattr(self.actions, 'importAnnotations'):
+            self.actions.importAnnotations.setText(self.get_str('importAnnotations'))
+            self.actions.importAnnotations.setToolTip(self.get_str('importAnnotationsDetail'))
         if hasattr(self.actions, 'exportAnnotations'):
             self.actions.exportAnnotations.setText(self.get_str('exportAnnotations'))
             self.actions.exportAnnotations.setToolTip(self.get_str('exportAnnotationsDetail'))
@@ -4756,6 +4759,13 @@ class MainWindow(QMainWindow, WindowMixin):
             + self.get_str('supportConversion')
         )
         info_label.setWordWrap(True)
+        # Use palette colors for better readability in all themes
+        info_label.setStyleSheet(
+            'padding: 10px; '
+            'background-color: palette(alternate-base); '
+            'color: palette(text); '
+            'border-radius: 4px;'
+        )
         main_layout.addWidget(info_label)
         
         # Buttons

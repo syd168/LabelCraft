@@ -129,6 +129,9 @@ class AnnotationConverter:
         if classes_file and os.path.exists(classes_file):
             with open(classes_file, 'r') as f:
                 classes = [line.strip() for line in f.readlines()]
+            print(f"[read_yolo] Loaded {len(classes)} classes from {classes_file}")
+            if len(classes) > 0:
+                print(f"[read_yolo] First few classes: {classes[:5]}")
         
         # Parse annotations
         annotations = []
@@ -151,6 +154,10 @@ class AnnotationConverter:
                         
                         # Get label name
                         label = classes[class_id] if class_id < len(classes) else str(class_id)
+                        
+                        # Debug: log first annotation conversion
+                        if len(annotations) == 0 and classes:
+                            print(f"[read_yolo] Converting class_id={class_id} -> label='{label}' (classes has {len(classes)} entries)")
                         
                         annotations.append({
                             'label': label,
@@ -681,7 +688,33 @@ class AnnotationConverter:
         if input_format not in readers:
             raise ValueError(f"Unsupported input format: {input_format}")
         
-        internal_data = readers[input_format](input_path)
+        # For YOLO input, classes_list is needed to convert class IDs to names
+        if input_format == 'yolo':
+            # Create a temporary classes file from classes_list
+            if classes_list:
+                print(f"[YOLO Conversion] Converting with {len(classes_list)} classes: {classes_list[:5]}...")
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                    for cls in classes_list:
+                        f.write(cls + '\n')
+                    temp_classes_file = f.name
+                
+                try:
+                    internal_data = readers[input_format](input_path, classes_file=temp_classes_file)
+                    print(f"[YOLO Conversion] Successfully read annotations from {os.path.basename(input_path)}")
+                    if internal_data.get('annotations'):
+                        sample_labels = [ann['label'] for ann in internal_data['annotations'][:3]]
+                        print(f"[YOLO Conversion] Sample labels: {sample_labels}")
+                finally:
+                    # Clean up temporary file
+                    if os.path.exists(temp_classes_file):
+                        os.remove(temp_classes_file)
+            else:
+                # No classes provided, will use numeric IDs as labels
+                print(f"Warning: No classes_list provided for YOLO input. Using numeric IDs as labels.")
+                internal_data = readers[input_format](input_path)
+        else:
+            internal_data = readers[input_format](input_path)
         
         # Write internal format to output format
         writers = {

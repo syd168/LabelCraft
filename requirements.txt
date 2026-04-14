@@ -2,6 +2,7 @@
 # Required for running the application
 pyside6>=6.5.0
 lxml>=4.9.0
+PyYAML>=6.0  # For parsing YOLO data.yaml files
 
 # Optional dependencies for development and testing
 # Uncomment if you want to contribute or run tests

@@ -1,11 +1,11 @@
 # LabelCraft - Intelligent Image Annotation Tool
 
-> **Version 2.0.0** - A modern image annotation tool with project management, developed based on [labelImg](https://github.com/tzutalin/labelImg)
+> **Version 2.1.0** - A modern image annotation tool with project management, developed based on [labelImg](https://github.com/tzutalin/labelImg)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
-[![Version](https://img.shields.io/badge/version-2.0.0-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Version](https://img.shields.io/badge/version-2.1.0-orange.svg)](https://github.com/syd168/LabelCraft/releases)
 [![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
 
 **[中文文档](README-CN.md)** | **[English](README.md)**
@@ -53,6 +53,8 @@ Dynamic language switching without restart:
 - Default label for batch annotation
 - Verification mode for quality control
 - Copy previous frame annotations
+- **Import external annotations** (v2.0.4+) - Import from YOLO, VOC, COCO, CreateML datasets
+- **Smart label mapping** - Automatically maps imported labels to project definitions
 
 ### 🛠️ Developer Tools
 - Built-in format converter (all 5 formats)
