@@ -10,6 +10,7 @@ recursive-include data *
 recursive-include resources *
 recursive-include icons *
 recursive-include libs *
+recursive-include locales *
 
 recursive-exclude build-tools *
 recursive-exclude tests *
