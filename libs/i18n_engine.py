@@ -31,9 +31,9 @@ class I18nEngine(QObject):
         super().__init__()
         
         if locales_dir is None:
-            # Default to project's locales directory
+            # Default to project's locales directory (inside libs package)
             locales_dir = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), 
+                os.path.dirname(__file__), 
                 'locales'
             )
         
