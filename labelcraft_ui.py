@@ -4887,7 +4887,16 @@ class MainWindow(QMainWindow, WindowMixin):
         output_format_str = format_map.get(selected_format[0], 'voc')
         
         # Get classes list for YOLO and COCO formats
-        classes_list = self.label_hist if self.label_hist else []
+        # Priority: project labels > label_hist > empty list
+        if self.current_project and self.current_project.labels:
+            classes_list = self.current_project.labels
+            print(f"Using {len(classes_list)} classes from project: {classes_list[:5]}...")
+        elif self.label_hist:
+            classes_list = self.label_hist
+            print(f"Using {len(classes_list)} classes from label history")
+        else:
+            classes_list = []
+            print("Warning: No classes list available. YOLO/COCO export may fail.")
         
         try:
             # Iterate through all annotation files
