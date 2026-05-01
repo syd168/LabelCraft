@@ -1,7 +1,7 @@
 #!/bin/bash
 ###############################################################################
 # Build LabelCraft for macOS
-# Creates a macOS application bundle using py2app
+# Creates a macOS application bundle using PyInstaller
 ###############################################################################
 
 set -e  # Exit on error
@@ -26,19 +26,39 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
     fi
 fi
 
-# Check if py2app is installed
-if ! python3 -m pip show py2app > /dev/null 2>&1; then
-    echo "Installing py2app..."
-    pip install py2app
+# Check if PyInstaller is installed
+if ! command -v pyinstaller &> /dev/null; then
+    echo "PyInstaller not found. Installing..."
+    pip install pyinstaller
 fi
 
 # Clean previous builds
 echo "Cleaning previous builds..."
 rm -rf build dist *.egg-info LabelCraft.spec
 
-# Build with py2app
+# Build with PyInstaller
 echo "Building macOS application..."
-python3 setup.py py2app
+pyinstaller --name=LabelCraft \
+    --onedir \
+    --windowed \
+    --add-data="resources:resources" \
+    --add-data="data:data" \
+    --add-data="libs:libs" \
+    --hidden-import=PySide6 \
+    --hidden-import=PySide6.QtCore \
+    --hidden-import=PySide6.QtGui \
+    --hidden-import=PySide6.QtWidgets \
+    --hidden-import=lxml \
+    --hidden-import=lxml.etree \
+    --hidden-import=xml.etree \
+    --hidden-import=xml.etree.ElementTree \
+    --hidden-import=json \
+    --hidden-import=csv \
+    --hidden-import=io \
+    --hidden-import=codecs \
+    --collect-submodules=xml \
+    --icon=resources/icons/app.icns \
+    main.py
 
 # Create distribution package
 VERSION=$(python3 -c "from libs import __version__; print(__version__)" 2>/dev/null || echo "latest")

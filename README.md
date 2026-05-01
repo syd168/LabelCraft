@@ -62,6 +62,11 @@ Dynamic language switching without restart:
 - Python API for integration
 - Customizable shortcuts
 - Brightness adjustment
+- **Cross-Platform Dark Mode** (v2.1.1+)
+  - Windows 11/10: Automatic registry detection
+  - Linux (GNOME/KDE/Ubuntu): dconf/gsettings support
+  - macOS: System appearance detection
+  - See [Windows 11 Dark Mode Guide](doc/WINDOWS11_DARK_MODE.md) for setup
 
 ## 📸 Screenshot
 

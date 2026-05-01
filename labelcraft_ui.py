@@ -40,6 +40,7 @@ from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
 from libs.project import Project, RecentProjectsManager
 from libs.newProjectDialog import NewProjectDialog
+from libs.theme_manager import apply_system_theme
 from libs import __version__
 
 __appname__ = 'LabelCraft'
@@ -5308,6 +5309,10 @@ def get_main_app(argv=None):
     app = QApplication(argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(new_icon("app"))
+    
+    # Apply system theme (light/dark mode)
+    # This will automatically follow the system's theme preference
+    apply_system_theme(app)
     
     # Tzutalin 201705+: Accept extra arguments to change predefined class file
     argparser = argparse.ArgumentParser(
