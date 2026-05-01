@@ -3,12 +3,12 @@
 ---
 
 **LabelCraft - 智能图像标注工具**  
-**版本 2.1.2** - 基于 labelImg 开发的现代化图像标注工具，新增项目管理与跨平台支持
+**版本 2.1.3** - 基于 labelImg 开发的现代化图像标注工具，新增项目管理与跨平台支持
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
-[![Version](https://img.shields.io/badge/version-2.1.2-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Version](https://img.shields.io/badge/version-2.1.3-orange.svg)](https://github.com/syd168/LabelCraft/releases)
 [![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
 [![PyPI](https://img.shields.io/pypi/v/labelcraft.svg)](https://pypi.org/project/LabelCraft/)
 
