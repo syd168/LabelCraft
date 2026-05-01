@@ -14,6 +14,12 @@ def main():
     This ensures proper module resolution and data file loading
     from any installation location.
     """
+    # Handle --version flag
+    if '--version' in sys.argv or '-v' in sys.argv:
+        from libs import __version__
+        print(f'LabelCraft {__version__}')
+        sys.exit(0)
+    
     # Get the directory where this module is located
     module_dir = os.path.dirname(os.path.abspath(__file__))
     # Get the parent directory (project root)
