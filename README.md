@@ -1,12 +1,13 @@
 # LabelCraft - Intelligent Image Annotation Tool
 
-> **Version 2.1.0** - A modern image annotation tool with project management, developed based on [labelImg](https://github.com/tzutalin/labelImg)
+> **Version 2.1.2** - A modern image annotation tool with project management and cross-platform support, developed based on [labelImg](https://github.com/tzutalin/labelImg)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
-[![Version](https://img.shields.io/badge/version-2.1.0-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Version](https://img.shields.io/badge/version-2.1.2-orange.svg)](https://github.com/syd168/LabelCraft/releases)
 [![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
+[![PyPI](https://img.shields.io/pypi/v/labelcraft.svg)](https://pypi.org/project/LabelCraft/)
 
 **[中文文档](README-CN.md)** | **[English](README.md)**
 
@@ -62,11 +63,15 @@ Dynamic language switching without restart:
 - Python API for integration
 - Customizable shortcuts
 - Brightness adjustment
-- **Cross-Platform Dark Mode** (v2.1.1+)
-  - Windows 11/10: Automatic registry detection
+- **Cross-Platform Dark Mode** (v2.1.2+)
+  - Windows 10/11: Automatic registry detection
   - Linux (GNOME/KDE/Ubuntu): dconf/gsettings support
   - macOS: System appearance detection
-  - See [Windows 11 Dark Mode Guide](doc/WINDOWS11_DARK_MODE.md) for setup
+  - Fusion style for consistent cross-platform rendering
+- **Unified Build System** (v2.1.2+)
+  - PyInstaller-based builds for all platforms
+  - Consistent distribution packages
+  - GitHub Actions CI/CD automation
 
 ## 📸 Screenshot
 
@@ -369,15 +374,18 @@ See [TRANSLATION_GUIDE.md](doc/TRANSLATION_GUIDE.md) for details.
 
 ## ❓ FAQ
 
-### Q: What's the difference between v1.x and v2.0?
+### Q: What's the difference between v1.x and v2.1?
 
-**A:** Version 2.0 introduces:
+**A:** Version 2.1 introduces:
 - ✅ Project-based workflow (vs. file-based in v1.x)
 - ✅ Support for COCO and CSV formats
 - ✅ Built-in format converter
-- ✅ Dynamic language switching
+- ✅ Dynamic language switching (6 languages)
 - ✅ Enhanced UI with better organization
 - ✅ Improved annotation management
+- ✅ Cross-platform dark mode detection
+- ✅ Unified PyInstaller build system
+- ✅ PyPI package distribution
 
 ### Q: Can I still use it without creating a project?
 

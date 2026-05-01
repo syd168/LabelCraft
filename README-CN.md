@@ -3,7 +3,14 @@
 ---
 
 **LabelCraft - 智能图像标注工具**  
-**版本 2.1.0** - 基于 labelImg 开发的现代化图像标注工具，新增项目管理功能
+**版本 2.1.2** - 基于 labelImg 开发的现代化图像标注工具，新增项目管理与跨平台支持
+
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
+[![Version](https://img.shields.io/badge/version-2.1.2-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
+[![PyPI](https://img.shields.io/pypi/v/labelcraft.svg)](https://pypi.org/project/LabelCraft/)
 
 [中文文档] | [English]
 
@@ -65,7 +72,18 @@ LabelCraft 是一款专业的图形化图像标注工具，具备先进的项目
 - Python API（便于集成）
 - 可自定义快捷键
 - 亮度调节功能
-- **系统主题支持** - 自动跟随系统亮/深色模式偏好
+- **跨平台深色模式** (v2.1.2+)
+  - Windows 10/11: 自动注册表检测
+  - Linux (GNOME/KDE/Ubuntu): dconf/gsettings 支持
+  - macOS: 系统外观检测
+  - Fusion 风格确保跨平台一致渲染
+- **统一构建系统** (v2.1.2+)
+  - 基于 PyInstaller 的全平台构建
+  - 一致的分发包格式
+  - GitHub Actions CI/CD 自动化
+- **PyPI 包发布** (v2.1.2+)
+  - 一键安装: `pip install labelcraft`
+  - 自动依赖管理
 
 📸 **软件截图**
 
@@ -397,14 +415,17 @@ LabelCraft/
 
 ❓ **常见问题（FAQ）**
 
-**Q：v1.x 与 v2.0 有什么区别？**  
-**A：** 2.0 版本主要新增了：
+**Q：v1.x 与 v2.1 有什么区别？**  
+**A：** 2.1 版本主要新增了：
 - ✅ 基于项目的完整工作流（v1.x 为文件式）
 - ✅ 支持 COCO 和 CSV 格式
 - ✅ 内置格式转换器
-- ✅ 动态语言切换
+- ✅ 动态语言切换（6种语言）
 - ✅ 更优化的界面布局
 - ✅ 更完善的标注管理功能
+- ✅ 跨平台深色模式自动检测
+- ✅ 统一的 PyInstaller 构建系统
+- ✅ PyPI 包分发，一键安装
 
 **Q：不创建项目可以直接使用吗？**  
 **A：** 可以！直接打开目录即可进入传统模式。但使用项目模式能获得更好的组织性和持久化支持。
