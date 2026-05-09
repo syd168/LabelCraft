@@ -53,10 +53,14 @@ def _create_dark_palette():
     dark_palette.setColor(QPalette.ColorRole.ToolTipBase, light_text)
     dark_palette.setColor(QPalette.ColorRole.ToolTipText, dark_bg)
     
+    # Placeholder text (input hint text)
+    dark_palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(150, 150, 150))
+    
     # Disabled state
     dark_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(128, 128, 128))
     dark_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(128, 128, 128))
     dark_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(128, 128, 128))
+    dark_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.PlaceholderText, QColor(80, 80, 80))
     
     return dark_palette
 
