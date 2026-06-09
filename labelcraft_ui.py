@@ -176,7 +176,10 @@ class MainWindow(QMainWindow, WindowMixin):
         # Create dock widget (remove title, will be hidden)
         self.dock = QDockWidget('', self)
         self.dock.setObjectName(self.get_str('labels'))
-        self.dock.setTitleBarWidget(QWidget())  # Hide the title bar
+        # Use zero-height title bar; a default QWidget reserves space on macOS
+        hidden_title_bar = QWidget()
+        hidden_title_bar.setFixedHeight(0)
+        self.dock.setTitleBarWidget(hidden_title_bar)
         
         # Create unified right panel with all sections
         right_panel_layout = QVBoxLayout()
@@ -261,8 +264,16 @@ class MainWindow(QMainWindow, WindowMixin):
         completed_layout.addWidget(self.file_list_widget)
         self.completed_group.setLayout(completed_layout)
         right_panel_layout.addWidget(self.completed_group)
-        
-        right_panel_layout.addStretch()
+
+        # Let list sections absorb extra height instead of leaving blank space below
+        right_panel_layout.setStretchFactor(self.output_group, 0)
+        right_panel_layout.setStretchFactor(self.filter_label_group, 0)
+        right_panel_layout.setStretchFactor(self.label_list_group, 1)
+        right_panel_layout.setStretchFactor(self.completed_group, 1)
+        self.label_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.file_list_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         label_list_container = QWidget()
         label_list_container.setLayout(right_panel_layout)
@@ -1049,6 +1060,8 @@ class MainWindow(QMainWindow, WindowMixin):
         unified_layout = QVBoxLayout()
         unified_layout.setContentsMargins(2, 2, 2, 2)
         unified_layout.setSpacing(3)
+        # Keep toolbar buttons at the top; macOS vertical toolbars stretch to window height
+        unified_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         # Check if project is loaded and image is available
         has_project = self.current_project is not None
@@ -1108,9 +1121,14 @@ class MainWindow(QMainWindow, WindowMixin):
         unified_layout.addWidget(zoom_widget_container)
         
         unified_container.setLayout(unified_layout)
+        unified_container.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         
         # Add the unified container to toolbar
         self.tools.addWidget(unified_container)
+        if self.os_name == 'Darwin':
+            self.tools.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         
         self.canvas.menus[0].clear()
         add_actions(self.canvas.menus[0], menu)
