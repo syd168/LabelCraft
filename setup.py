@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from setuptools import setup, find_packages, Command
-from sys import platform as _platform
 from shutil import rmtree
 import sys
 import os
@@ -34,32 +33,7 @@ try:
 except FileNotFoundError:
     history = ''
 
-SET_REQUIRES = []
-if _platform == "darwin":
-   SET_REQUIRES.append('py2app')
-
 required_packages = find_packages(exclude=['tests', 'build', 'dist'])
-
-APP = ['main.py']
-OPTIONS = {
-    'argv_emulation': True,
-    'iconfile': 'resources/icons/app.icns',
-    'packages': [
-        'PySide6',
-        'lxml',
-        'xml',
-        'xml.etree',
-        'json',
-        'csv',
-        'io',
-        'codecs',
-    ],
-    'excludes': [
-        'PySide6.QtNetwork',
-        'PySide6.QtWebEngineCore',
-        'PySide6.QtWebEngineWidgets',
-    ]
-}
 
 class UploadCommand(Command):
     """Support setup.py upload."""
@@ -103,7 +77,6 @@ class UploadCommand(Command):
 
 
 setup(
-    app=APP if _platform == "darwin" else None,
     name=NAME,
     version=about['__version__'],
     description="LabelCraft - A modern graphical image annotation tool based on labelImg",
@@ -142,8 +115,6 @@ setup(
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
         'Topic :: Multimedia :: Graphics',
     ],
-    options={'py2app': OPTIONS} if _platform == "darwin" else {},
-    setup_requires=SET_REQUIRES,
     # $ setup.py publish support.
     cmdclass={
         'upload': UploadCommand,

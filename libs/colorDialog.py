@@ -16,9 +16,10 @@ class ColorDialog(QColorDialog):
         # The default is set at invocation time, so that it
         # works across dialogs for different elements.
         self.default = None
-        self.bb = self.layout().itemAt(1).widget()
-        self.bb.addButton(BB.RestoreDefaults)
-        self.bb.clicked.connect(self.check_restore)
+        self.bb = self._find_button_box()
+        if self.bb is not None:
+            self.bb.addButton(BB.RestoreDefaults)
+            self.bb.clicked.connect(self.check_restore)
         
         # Store parent reference for i18n
         self.parent_window = parent
@@ -27,6 +28,20 @@ class ColorDialog(QColorDialog):
         if parent and hasattr(parent, 'i18n'):
             parent.i18n.language_changed.connect(self.retranslate)
     
+    def _find_button_box(self):
+        """Locate the button box; layout index differs across platforms."""
+        layout = self.layout()
+        if layout is None:
+            return None
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            widget = item.widget()
+            if isinstance(widget, QDialogButtonBox):
+                return widget
+        return None
+
     def tr(self, key: str, default: str = None, **kwargs):
         """
         Translate a string - standard i18n method name (Qt convention).
@@ -57,6 +72,8 @@ class ColorDialog(QColorDialog):
         return self.currentColor() if self.exec() else None
 
     def check_restore(self, button):
+        if self.bb is None:
+            return
         # In PySide6/Qt6, buttonRole returns an enum, need to use .value for bitwise operation
         role = self.bb.buttonRole(button)
         role_value = role.value if hasattr(role, 'value') else role

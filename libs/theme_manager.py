@@ -195,8 +195,9 @@ def _detect_macos_dark_mode():
             text=True,
             timeout=2
         )
-        # If the command returns 'Dark', dark mode is enabled
-        return 'Dark' in result.stdout or result.returncode == 0
+        if result.returncode != 0:
+            return False
+        return 'dark' in result.stdout.strip().lower()
     except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
         # If the command fails, assume light mode (default on macOS)
         return False

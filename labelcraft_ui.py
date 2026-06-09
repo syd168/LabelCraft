@@ -5306,6 +5306,12 @@ def get_main_app(argv=None):
     """
     if not argv:
         argv = []
+    argv = filter_platform_argv(argv)
+
+    # Required for proper Qt rendering when launched from macOS .app bundles
+    if platform.system() == 'Darwin':
+        os.environ.setdefault('QT_MAC_WANTS_LAYER', '1')
+
     app = QApplication(argv)
     app.setApplicationName(__appname__)
     app.setWindowIcon(new_icon("app"))

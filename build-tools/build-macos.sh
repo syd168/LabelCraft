@@ -41,6 +41,7 @@ echo "Building macOS application..."
 pyinstaller --name=LabelCraft \
     --onedir \
     --windowed \
+    --argv-emulation \
     --add-data="resources:resources" \
     --add-data="data:data" \
     --add-data="libs:libs" \

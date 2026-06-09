@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import sys
 from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = ['PySide6', 'PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets', 'lxml', 'lxml.etree', 'xml.etree', 'xml.etree.ElementTree', 'json', 'csv', 'io', 'codecs']
@@ -39,7 +40,7 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
-    argv_emulation=False,
+    argv_emulation=sys.platform == 'darwin',
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,

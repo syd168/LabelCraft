@@ -9,6 +9,22 @@ from PySide6.QtCore import *
 from PySide6.QtWidgets import *
 
 
+def filter_platform_argv(argv):
+    """
+    Remove OS-injected launch arguments that break argparse.
+
+    macOS Finder/Dock injects -psn_* when launching GUI apps from .app bundles.
+    """
+    if not argv:
+        return argv
+    filtered = [argv[0]]
+    for arg in argv[1:]:
+        if arg.startswith('-psn_'):
+            continue
+        filtered.append(arg)
+    return filtered
+
+
 def new_icon(icon):
     return QIcon(':/' + icon)
 
