@@ -148,7 +148,11 @@ class YoloReader:
     def parse_yolo_format(self):
         bnd_box_file = open(self.file_path, 'r')
         for bndBox in bnd_box_file:
-            class_index, x_center, y_center, w, h = bndBox.strip().split(' ')
+            parts = bndBox.strip().split()
+            # Compatible with YOLO-Pose lines (extra keypoint fields ignored here).
+            if len(parts) < 5:
+                continue
+            class_index, x_center, y_center, w, h = parts[:5]
             label, x_min, y_min, x_max, y_max = self.yolo_line_to_shape(class_index, x_center, y_center, w, h)
 
             # Caveat: difficult flag is discarded when saved as yolo format.

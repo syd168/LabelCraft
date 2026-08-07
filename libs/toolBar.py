@@ -13,6 +13,9 @@ class ToolBar(QToolBar):
         layout.setContentsMargins(*m)
         self.setContentsMargins(*m)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
+        # Compact icon-only toolbar by default
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.setIconSize(QSize(24, 24))
 
     def addAction(self, action):
         if isinstance(action, QWidgetAction):
@@ -20,16 +23,28 @@ class ToolBar(QToolBar):
         btn = ToolButton()
         btn.setDefaultAction(action)
         btn.setToolButtonStyle(self.toolButtonStyle())
+        btn.setAutoRaise(True)
+        # Prefer detailed tip; fall back to action text
+        tip = action.toolTip() or action.text()
+        if tip:
+            btn.setToolTip(tip)
+            action.setToolTip(tip)
         self.addWidget(btn)
 
 
 class ToolButton(QToolButton):
-    """ToolBar companion class which ensures all buttons have the same size."""
-    minSize = (60, 60)
+    """Compact square tool button for icon-only toolbars."""
+    minSize = (32, 32)
+
+    def __init__(self, parent=None):
+        super(ToolButton, self).__init__(parent)
+        self.setAutoRaise(True)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
 
     def minimumSizeHint(self):
         ms = super(ToolButton, self).minimumSizeHint()
         w1, h1 = ms.width(), ms.height()
         w2, h2 = self.minSize
-        ToolButton.minSize = max(w1, w2), max(h1, h2)
+        # Cap growth so Chinese text labels don't force a huge rail
+        ToolButton.minSize = min(max(w1, w2), 40), min(max(h1, h2), 40)
         return QSize(*ToolButton.minSize)

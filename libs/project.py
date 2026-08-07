@@ -6,11 +6,48 @@ import os
 import json
 from datetime import datetime
 
+# Primary short extension; legacy long form remains readable/writable.
+PROJECT_EXT = '.lbc'
+PROJECT_EXT_LEGACY = '.labelcraft'
+PROJECT_EXTS = (PROJECT_EXT, PROJECT_EXT_LEGACY)
+
+
+def is_project_file(path):
+    """True if path uses a known LabelCraft project extension."""
+    if not path:
+        return False
+    lower = path.lower()
+    return any(lower.endswith(ext) for ext in PROJECT_EXTS)
+
+
+def ensure_project_extension(path, prefer_primary=True):
+    """
+    Ensure path has a project extension.
+    - Already .lbc / .labelcraft → unchanged (preserves legacy files)
+    - Otherwise append primary .lbc (or legacy if prefer_primary=False)
+    """
+    if not path:
+        return path
+    if is_project_file(path):
+        return path
+    return path + (PROJECT_EXT if prefer_primary else PROJECT_EXT_LEGACY)
+
+
+def project_file_filter():
+    """QFileDialog filter string (open/save)."""
+    return (
+        f'LabelCraft Project (*{PROJECT_EXT} *{PROJECT_EXT_LEGACY});;'
+        f'LabelCraft Project (*{PROJECT_EXT});;'
+        f'LabelCraft Project Legacy (*{PROJECT_EXT_LEGACY});;'
+        'All Files (*)'
+    )
+
 
 class Project:
     """Represents a LabelCraft annotation project"""
     
-    def __init__(self, name=None, project_dir=None, labels=None, format='PASCAL_VOC', version='2.0'):
+    def __init__(self, name=None, project_dir=None, labels=None, format='PASCAL_VOC', version='2.0',
+                 task='detect', kpt_shape=None, keypoint_names=None, flip_idx=None, skeleton=None):
         self.name = name or 'Untitled Project'
         self.version = version
         self.created_at = datetime.now().isoformat()
@@ -18,25 +55,43 @@ class Project:
         self.project_dir = project_dir or ''  # Project directory (contains project file and annotations)
         self.annotation_dir = ''  # Will be set to project_dir/annotations
         self.labels = labels or []
-        self.format = format  # PASCAL_VOC, YOLO, CREATE_ML
+        self.format = format  # PASCAL_VOC, YOLO, CREATE_ML, LABELCRAFT_JSON
         self.last_opened_image = None
-        self.project_file = None  # Path to .labelcraft file
+        self.project_file = None  # Path to .lbc / .labelcraft file
+
+        # Task: 'detect' (bbox) or 'pose' (bbox + keypoints)
+        self.task = task or 'detect'
+        self.kpt_shape = list(kpt_shape) if kpt_shape else [0, 3]
+        self.keypoint_names = list(keypoint_names) if keypoint_names else []
+        self.flip_idx = list(flip_idx) if flip_idx is not None else list(range(len(self.keypoint_names)))
+        self.skeleton = [list(e) for e in skeleton] if skeleton else []
         
         # Auto-set annotation directory relative to project directory
         if self.project_dir:
             self.annotation_dir = os.path.join(self.project_dir, 'annotations')
+
+    def is_pose_task(self):
+        return self.task == 'pose' and int(self.kpt_shape[0] or 0) > 0
+
+    def pose_config_dict(self):
+        return {
+            'task': self.task,
+            'kpt_shape': list(self.kpt_shape),
+            'keypoint_names': list(self.keypoint_names),
+            'flip_idx': list(self.flip_idx),
+            'skeleton': [list(e) for e in self.skeleton],
+        }
         
     def save(self, file_path=None):
-        """Save project to .labelcraft file"""
+        """Save project to .lbc (or keep existing .labelcraft path)."""
         if file_path:
             self.project_file = file_path
         
         if not self.project_file:
             raise ValueError("No project file path specified")
         
-        # Ensure file has .labelcraft extension
-        if not self.project_file.endswith('.labelcraft'):
-            self.project_file += '.labelcraft'
+        # Keep legacy .labelcraft if already used; new files default to .lbc
+        self.project_file = ensure_project_extension(self.project_file, prefer_primary=True)
         
         project_data = {
             'name': self.name,
@@ -47,7 +102,12 @@ class Project:
             'annotation_dir': self.annotation_dir,
             'labels': self.labels,
             'format': self.format,
-            'last_opened_image': self.last_opened_image
+            'last_opened_image': self.last_opened_image,
+            'task': self.task,
+            'kpt_shape': list(self.kpt_shape),
+            'keypoint_names': list(self.keypoint_names),
+            'flip_idx': list(self.flip_idx),
+            'skeleton': [list(e) for e in self.skeleton],
         }
         
         with open(self.project_file, 'w', encoding='utf-8') as f:
@@ -58,9 +118,12 @@ class Project:
     
     @staticmethod
     def load(file_path):
-        """Load project from .labelcraft file"""
+        """Load project from .lbc or legacy .labelcraft file."""
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Project file not found: {file_path}")
+        if not is_project_file(file_path):
+            # Still try load — user may pick via "All Files"
+            pass
         
         with open(file_path, 'r', encoding='utf-8') as f:
             project_data = json.load(f)
@@ -70,7 +133,12 @@ class Project:
             project_dir=project_data.get('project_dir', ''),
             labels=project_data.get('labels', []),
             format=project_data.get('format', 'PASCAL_VOC'),
-            version=project_data.get('version', '2.0')
+            version=project_data.get('version', '2.0'),
+            task=project_data.get('task', 'detect'),
+            kpt_shape=project_data.get('kpt_shape'),
+            keypoint_names=project_data.get('keypoint_names'),
+            flip_idx=project_data.get('flip_idx'),
+            skeleton=project_data.get('skeleton'),
         )
         
         # Restore annotation_dir from saved data (override auto-generated path)
@@ -137,12 +205,18 @@ class Project:
             format_label = 'Output Format'
             not_set_label = 'Not Set'
         
+        task_line = f"Task: {self.task}"
+        if self.is_pose_task():
+            kpt_names = ', '.join(self.keypoint_names) if self.keypoint_names else str(self.kpt_shape[0])
+            task_line += f" (keypoints: {kpt_names})"
+
         return (
             f"{name_label}: {self.name}\n"
             f"{location_label}: {self.project_dir}\n"
             f"{annotation_label}: {self.annotation_dir or not_set_label}\n"
             f"{label_count_label}: {len(self.labels)} ({labels_str})\n"
-            f"{format_label}: {self.format}"
+            f"{format_label}: {self.format}\n"
+            f"{task_line}"
         )
 
 
@@ -192,7 +266,7 @@ class RecentProjectsManager:
         """Add a project to recent projects list
         
         Args:
-            project_path: Path to the .labelcraft file
+            project_path: Path to the .lbc / .labelcraft file
             project_name: Optional project name (will extract from path if not provided)
         """
         recent_projects = RecentProjectsManager.load_recent_projects()

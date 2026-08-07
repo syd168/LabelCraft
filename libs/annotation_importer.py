@@ -63,15 +63,14 @@ class AnnotationImporter:
             return False
         
         # Step 2.5: If auto-detect selected, determine format BEFORE scanning
+        # Prefer the directory the user just selected (not stale last_open_dir).
         actual_format_for_scan = selected_format
         if selected_format == 'auto':
-            # Try to detect format from directory structure first
-            detected_hint = self._detect_format_hint()
+            detected_hint = self._detect_format_hint(source_dir)
             if detected_hint:
                 actual_format_for_scan = detected_hint
                 print(f"[Auto-detect] Using format hint: {detected_hint}")
             else:
-                # No hint, use generic scan (will detect from file content later)
                 actual_format_for_scan = None
                 print("[Auto-detect] No format hint, will scan all files")
         
@@ -92,10 +91,14 @@ class AnnotationImporter:
         if selected_format == 'auto':
             actual_format = self._detect_actual_format(annotation_files, source_dir)
             if not actual_format:
+                # Last chance: directory structure (data.yaml / train|valid/labels)
+                actual_format = self._detect_format_hint(source_dir)
+            if not actual_format:
                 QMessageBox.warning(
                     self.parent,
                     self.get_str('warningTitle'),
-                    self.get_str('importAutoDetectFailed')
+                    self.get_str('importAutoDetectFailed') + '\n\n'
+                    + self.get_str('importAutoDetectFailedTip')
                 )
                 return False
             print(f"Auto-detected format: {actual_format}")
@@ -129,13 +132,13 @@ class AnnotationImporter:
         
         format_combo = QComboBox()
         format_options = [
-            ('auto', '🔍 Auto-detect (Recommended)'),
-            ('voc', 'PASCAL VOC (XML)'),
-            ('yolo', 'YOLO (TXT)'),
-            ('coco', 'COCO (JSON)'),
-            ('createml', 'CreateML (JSON)'),
-            ('json', 'LabelCraft JSON'),
-            ('csv', 'CSV')
+            ('auto', self.get_str('importFormatAuto')),
+            ('voc', self.get_str('formatPascalVoc')),
+            ('yolo', self.get_str('importFormatYolo')),
+            ('coco', self.get_str('importFormatCoco')),
+            ('createml', self.get_str('exportFormatCreateML')),
+            ('json', self.get_str('formatLabelCraftJson')),
+            ('csv', self.get_str('importFormatCsv')),
         ]
         
         for value, text in format_options:
@@ -192,16 +195,19 @@ class AnnotationImporter:
         
         return selected_format
     
-    def _detect_format_hint(self):
+    def _detect_format_hint(self, check_dir=None):
         """
         Detect likely format based on common directory structures and files.
         This is a hint, not definitive detection.
+
+        Args:
+            check_dir: Directory to inspect. Falls back to parent.last_open_dir.
         
         Returns:
             str: Detected format code or None
         """
-        # Check last_open_dir for hints
-        check_dir = getattr(self.parent, 'last_open_dir', None)
+        if not check_dir:
+            check_dir = getattr(self.parent, 'last_open_dir', None)
         if not check_dir or not os.path.exists(check_dir):
             return None
         
@@ -229,6 +235,13 @@ class AnnotationImporter:
         if os.path.exists(os.path.join(check_dir, 'labels')):
             print(f"[Format Hint] Found labels/ directory in {check_dir}")
             return 'yolo'
+
+        # 4b. Ultralytics split layout: train|valid|val|test/labels
+        for split in ('train', 'valid', 'val', 'test'):
+            split_labels = os.path.join(check_dir, split, 'labels')
+            if os.path.isdir(split_labels):
+                print(f"[Format Hint] Found {split}/labels/ in {check_dir}")
+                return 'yolo'
         
         # 5. If current dir IS labels/, check for sibling images/
         if os.path.basename(check_dir).lower() == 'labels':
@@ -339,17 +352,10 @@ class AnnotationImporter:
             if ext == '.xml':
                 return 'voc'
             
-            # TXT -> YOLO (check content)
+            # TXT -> YOLO detect (5) or YOLO-Pose (5 + K*2/3)
             elif ext == '.txt':
-                try:
-                    with open(sample_file, 'r') as f:
-                        first_line = f.readline().strip()
-                        # YOLO format: class_id x y w h (space-separated numbers)
-                        parts = first_line.split()
-                        if len(parts) == 5 and all(self._is_number(p) for p in parts):
-                            return 'yolo'
-                except:
-                    pass
+                if self._txt_looks_like_yolo(sample_file):
+                    return 'yolo'
             
             # JSON -> Check content
             elif ext == '.json':
@@ -367,8 +373,11 @@ class AnnotationImporter:
                             if isinstance(data[0], dict) and 'image' in data[0]:
                                 return 'createml'
                         
-                        # LabelCraft JSON: single annotation object
-                        elif isinstance(data, dict) and ('shapes' in data or 'annotation' in data):
+                        # LabelCraft JSON: annotations + image
+                        elif isinstance(data, dict) and (
+                            'shapes' in data or 'annotation' in data or
+                            ('annotations' in data and 'image' in data)
+                        ):
                             return 'json'
                 except:
                     pass
@@ -376,8 +385,37 @@ class AnnotationImporter:
             # CSV
             elif ext == '.csv':
                 return 'csv'
+
+        # Directory-level fallback (split YOLO layouts)
+        hint = self._detect_format_hint(source_dir)
+        if hint:
+            return hint
         
         return None
+
+    def _txt_looks_like_yolo(self, txt_path):
+        """True if file content looks like YOLO detect or YOLO-Pose labels."""
+        try:
+            with open(txt_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for _ in range(20):
+                    line = f.readline()
+                    if not line:
+                        break
+                    parts = line.strip().split()
+                    if not parts:
+                        continue
+                    if not all(self._is_number(p) for p in parts):
+                        return False
+                    n = len(parts)
+                    # Detect: 5 fields. Pose: 5 + K*2 or 5 + K*3
+                    if n == 5:
+                        return True
+                    if n > 5 and ((n - 5) % 3 == 0 or (n - 5) % 2 == 0):
+                        return True
+                    return False
+        except Exception:
+            return False
+        return False
     
     def _is_number(self, s):
         """Check if string is a number."""
@@ -386,6 +424,59 @@ class AnnotationImporter:
             return True
         except ValueError:
             return False
+
+    def _collect_yolo_label_files(self, source_dir):
+        """
+        Collect YOLO label txt files from common layouts:
+          - source/labels/*.txt
+          - source/{train,valid,val,test}/labels/*.txt
+          - source itself is labels/
+        """
+        files = []
+        skip_names = {'classes.txt', 'requirements.txt', 'readme.txt'}
+
+        def add_from_dir(labels_dir):
+            if not os.path.isdir(labels_dir):
+                return
+            for root, _dirs, names in os.walk(labels_dir):
+                for name in names:
+                    if not name.endswith('.txt') or name.startswith('.'):
+                        continue
+                    if name.lower() in skip_names:
+                        continue
+                    if name.lower().startswith(('版权', 'license', 'readme')):
+                        continue
+                    path = os.path.join(root, name)
+                    if self._txt_looks_like_yolo(path):
+                        files.append(path)
+
+        # Classic: labels/
+        add_from_dir(os.path.join(source_dir, 'labels'))
+
+        # Split layout: train/valid/val/test/labels
+        for split in ('train', 'valid', 'val', 'test'):
+            add_from_dir(os.path.join(source_dir, split, 'labels'))
+
+        # Selected folder is labels/
+        if os.path.basename(source_dir).lower() == 'labels':
+            add_from_dir(source_dir)
+
+        # Flat txts in source_dir
+        for path in glob.glob(os.path.join(source_dir, '*.txt')):
+            name = os.path.basename(path).lower()
+            if name in skip_names or name.startswith(('版权', 'license', 'readme')):
+                continue
+            if self._txt_looks_like_yolo(path):
+                files.append(path)
+
+        # De-duplicate preserve order
+        seen = set()
+        unique = []
+        for p in files:
+            if p not in seen:
+                seen.add(p)
+                unique.append(p)
+        return unique
     
     def _parse_yolo_data_yaml(self, source_dir):
         """
@@ -426,24 +517,43 @@ class AnnotationImporter:
                 data = yaml.safe_load(f)
             
             # Extract class names from 'names' field
+            names_list = None
             if 'names' in data:
                 names = data['names']
                 
                 # Handle both list and dict formats
                 if isinstance(names, list):
                     # List format: ['cat', 'dog', 'bird']
-                    return [str(name).strip() for name in names if name]
+                    names_list = [str(name).strip() for name in names if name]
                 elif isinstance(names, dict):
                     # Dict format: {0: 'cat', 1: 'dog'}
-                    return [str(names[k]).strip() for k in sorted(names.keys()) if names[k]]
+                    names_list = [str(names[k]).strip() for k in sorted(names.keys()) if names[k]]
             
             # Fallback: try 'nc' (number of classes) and generate generic names
-            if 'nc' in data:
+            if names_list is None and 'nc' in data:
                 nc = int(data['nc'])
                 print(f"Warning: data.yaml has 'nc' but no 'names'. Generated {nc} generic class names.")
-                return [f'class_{i}' for i in range(nc)]
-            
-            return None
+                names_list = [f'class_{i}' for i in range(nc)]
+
+            # Store pose metadata on importer for project sync (best-effort)
+            if hasattr(self, 'parent') and self.parent and hasattr(self.parent, 'current_project'):
+                project = self.parent.current_project
+                if project is not None and data.get('kpt_shape'):
+                    try:
+                        project.task = 'pose'
+                        project.kpt_shape = list(data['kpt_shape'])
+                        if data.get('flip_idx') is not None:
+                            project.flip_idx = list(data['flip_idx'])
+                        if data.get('skeleton') is not None:
+                            project.skeleton = [list(e) for e in data['skeleton']]
+                        k = int(project.kpt_shape[0])
+                        if not project.keypoint_names or len(project.keypoint_names) != k:
+                            project.keypoint_names = [f'kpt{i}' for i in range(k)]
+                        print(f"Detected YOLO-Pose config: kpt_shape={project.kpt_shape}")
+                    except Exception as pose_err:
+                        print(f"Warning: failed to apply pose config from data.yaml: {pose_err}")
+
+            return names_list
             
         except Exception as e:
             print(f"Warning: Failed to parse data.yaml: {e}")
@@ -464,7 +574,13 @@ class AnnotationImporter:
             return None
         
         from libs.ustr import ustr
-        return ustr(source_dir)
+        source_dir = ustr(source_dir)
+        # Keep last_open_dir in sync so subsequent format hints use this folder
+        try:
+            self.parent.last_open_dir = source_dir
+        except Exception:
+            pass
+        return source_dir
     
     def _scan_annotation_files(self, source_dir, selected_format):
         """
@@ -489,36 +605,24 @@ class AnnotationImporter:
         # For 'auto' format, scan for all common annotation types
         if selected_format == 'auto':
             print(f"[Scan] Auto mode: scanning for all annotation file types in {source_dir}")
-            # Scan for all common annotation extensions
-            for ext in ['*.xml', '*.txt', '*.json', '*.csv']:
+            # Scan for all common annotation extensions at top level
+            for ext in ['*.xml', '*.json', '*.csv']:
                 files = glob.glob(os.path.join(source_dir, ext))
                 annotation_files.extend(files)
-            
-            # Also check for YOLO labels/ directory
-            labels_dir = os.path.join(source_dir, 'labels')
-            if os.path.exists(labels_dir):
-                print(f"[Scan] Found labels/ directory, scanning recursively")
-                for root, dirs, files in os.walk(labels_dir):
-                    for file in files:
-                        if file.endswith('.txt') and not file.startswith('.'):
-                            annotation_files.append(os.path.join(root, file))
+
+            # YOLO / YOLO-Pose labels (including train/valid/test splits)
+            yolo_files = self._collect_yolo_label_files(source_dir)
+            if yolo_files:
+                print(f"[Scan] Found {len(yolo_files)} YOLO/Pose label files")
+                annotation_files.extend(yolo_files)
             
             # Filter out non-annotation files
             annotation_files = [f for f in annotation_files 
-                              if not os.path.basename(f).lower().startswith(('data', 'classes', 'info', 'config'))]
+                              if not os.path.basename(f).lower().startswith(('data', 'classes', 'info', 'config', '版权'))]
         elif selected_format == 'yolo':
-            # For YOLO format, search in labels/ subdirectory recursively
-            labels_dir = os.path.join(source_dir, 'labels')
-            if os.path.exists(labels_dir):
-                # Recursively search in labels/ directory
-                for root, dirs, files in os.walk(labels_dir):
-                    for file in files:
-                        if file.endswith('.txt') and not file.startswith('.'):
-                            annotation_files.append(os.path.join(root, file))
-            else:
-                # No labels/ directory, search in current directory
-                ext_pattern = ext_map.get(selected_format, '*.txt')
-                annotation_files = glob.glob(os.path.join(source_dir, ext_pattern))
+            # YOLO detect / pose: support labels/ and train|valid|test/labels/
+            annotation_files = self._collect_yolo_label_files(source_dir)
+            print(f"[Scan] YOLO mode: collected {len(annotation_files)} label files")
         else:
             # For other formats, search in current directory
             ext_pattern = ext_map.get(selected_format, '*.*')
@@ -558,19 +662,20 @@ class AnnotationImporter:
         # Basic info
         basic_info = QLabel(
             f"<b>{self.get_str('importSourceDir')}</b> {source_dir}<br>"
-            f"<b>{self.get_str('importDetectedFiles')}</b> <span style='color: blue;'>{len(annotation_files)}</span> files"
+            f"<b>{self.get_str('importDetectedFiles')}</b> "
+            f"<span style='color: blue;'>{self.get_str('importFilesCount').format(len(annotation_files))}</span>"
         )
         basic_info.setWordWrap(True)
         info_layout.addWidget(basic_info)
         
         format_names = {
-            'auto': 'Auto-detect',
-            'voc': 'PASCAL VOC (XML)',
-            'yolo': 'YOLO (TXT)',
-            'coco': 'COCO (JSON)',
-            'createml': 'CreateML (JSON)',
-            'json': 'LabelCraft JSON',
-            'csv': 'CSV'
+            'auto': self.get_str('importFormatAuto'),
+            'voc': self.get_str('formatPascalVoc'),
+            'yolo': self.get_str('importFormatYolo'),
+            'coco': self.get_str('importFormatCoco'),
+            'createml': self.get_str('exportFormatCreateML'),
+            'json': self.get_str('formatLabelCraftJson'),
+            'csv': self.get_str('importFormatCsv'),
         }
         
         # Show selected format and detected format if different
@@ -631,9 +736,11 @@ class AnnotationImporter:
             labels_count = len(self.current_project.labels)
             labels_preview = ", ".join(self.current_project.labels[:10])
             if labels_count > 10:
-                labels_preview += f"... (+{labels_count - 10} more)"
+                labels_preview += self.get_str('importMoreClasses').format(labels_count - 10)
             
-            labels_label = QLabel(f"<b>{self.get_str('importClassList')}</b> ({labels_count} classes):")
+            labels_label = QLabel(
+                f"<b>{self.get_str('importClassList')}</b> "
+                f"{self.get_str('importClassCount').format(labels_count)}")
             labels_widget = QLabel(labels_preview)
             labels_widget.setWordWrap(True)
             # Use palette for automatic theme adaptation
@@ -662,16 +769,16 @@ class AnnotationImporter:
         
         # YOLO detected labels info (if available)
         if yolo_labels:
-            yolo_info_group = QGroupBox("📋 YOLO data.yaml Detected Classes")
+            yolo_info_group = QGroupBox(self.get_str('importYoloYamlGroup'))
             yolo_info_layout = QVBoxLayout()
             
             yolo_count = len(yolo_labels)
             yolo_preview = ", ".join(yolo_labels[:10])
             if yolo_count > 10:
-                yolo_preview += f"... (+{yolo_count - 10} more)"
+                yolo_preview += self.get_str('importMoreClasses').format(yolo_count - 10)
             
             yolo_info = QLabel(
-                f"<b>Detected {yolo_count} classes from data.yaml:</b><br>"
+                f"<b>{self.get_str('importYoloYamlDetected').format(yolo_count)}</b><br>"
                 f"{yolo_preview}"
             )
             yolo_info.setWordWrap(True)
@@ -686,9 +793,7 @@ class AnnotationImporter:
                 # Project has labels, show mapping warning
                 project_count = len(self.current_project.labels)
                 hint_label = QLabel(
-                    f"⚠️ <b>Note:</b> Your project has {project_count} defined labels. "
-                    f"Imported annotations will be mapped to <b>project labels</b> by class ID. "
-                    f"If the class order differs between source and project, labels may be incorrect."
+                    self.get_str('importYoloYamlMappingNote').format(project_count)
                 )
                 hint_label.setWordWrap(True)
                 hint_label.setStyleSheet(
@@ -699,10 +804,7 @@ class AnnotationImporter:
                 yolo_info_layout.addWidget(hint_label)
             else:
                 # No project labels, suggest adding them
-                hint_label = QLabel(
-                    "💡 <b>Tip:</b> These labels will be used for conversion. "
-                    "Consider adding them to your project for consistency."
-                )
+                hint_label = QLabel(self.get_str('importYoloYamlAddTip'))
                 hint_label.setWordWrap(True)
                 hint_label.setStyleSheet(
                     'padding: 8px; color: palette(text); font-size: 11px;'
@@ -850,7 +952,9 @@ class AnnotationImporter:
         imported_count = 0
         skipped_count = 0
         error_count = 0
+        image_copied_count = 0
         total = len(annotation_files)
+        self._missing_image_names = []
         
         # Show progress
         progress_dialog = QProgressDialog(
@@ -892,10 +996,25 @@ class AnnotationImporter:
                 target_ext = target_ext_map.get(target_format, '.xml')
                 target_anno_file = os.path.join(target_anno_dir, base_name + target_ext)
                 
-                if skip_existing and os.path.exists(target_anno_file):
-                    print(f"Skipping existing: {anno_filename}")
+                already_exists = skip_existing and os.path.exists(target_anno_file)
+                # Pose repair: re-convert if existing JSON has no keypoints
+                needs_pose_repair = False
+                if already_exists and target_ext == '.json' and (
+                    (self.current_project and self.current_project.is_pose_task())
+                    or source_format == 'yolo'
+                ):
+                    needs_pose_repair = self._json_missing_keypoints(target_anno_file)
+
+                if already_exists and not needs_pose_repair:
+                    print(f"Skipping existing annotation: {anno_filename}")
                     skipped_count += 1
+                    # Still try to backfill missing images from previous imports
+                    if copy_images and self._copy_image(base_name, source_dir, anno_file, target_img_dir):
+                        image_copied_count += 1
                     continue
+
+                if needs_pose_repair:
+                    print(f"Repairing pose keypoints: {anno_filename}")
                 
                 # Convert annotation if needed
                 if source_format != target_format:
@@ -916,8 +1035,8 @@ class AnnotationImporter:
                     shutil.copy2(anno_file, target_anno_file)
                 
                 # Find and copy corresponding image
-                if copy_images:
-                    self._copy_image(base_name, source_dir, anno_file, target_img_dir)
+                if copy_images and self._copy_image(base_name, source_dir, anno_file, target_img_dir):
+                    image_copied_count += 1
                 
                 imported_count += 1
                 print(f"Imported: {anno_filename}")
@@ -929,6 +1048,11 @@ class AnnotationImporter:
                 error_count += 1
         
         progress_dialog.close()
+
+        missing_imgs = getattr(self, '_missing_image_names', []) or []
+        if missing_imgs:
+            print(f"Image lookup summary: missing {len(missing_imgs)} / "
+                  f"{imported_count + skipped_count} (copied {image_copied_count})")
         
         # Show detailed result
         result_parts = [
@@ -942,10 +1066,16 @@ class AnnotationImporter:
         
         if error_count > 0:
             result_parts.append(f"❌ <b>Errors:</b> {error_count} files")
+
+        if copy_images:
+            result_parts.append(f"🖼️ <b>Images copied:</b> {image_copied_count}")
+            if missing_imgs:
+                result_parts.append(f"⚠️ <b>Images not found:</b> {len(missing_imgs)}")
         
         result_parts.extend([
             "",
             f"<b>Target directory:</b><br>{target_anno_dir}",
+            f"<b>Images directory:</b><br>{target_img_dir}",
         ])
         
         result_msg = "<br>".join(result_parts)
@@ -958,63 +1088,184 @@ class AnnotationImporter:
         else:
             QMessageBox.critical(self.parent, self.get_str('importCompleteTitle'), result_msg)
         
-        # Refresh file list
-        if hasattr(self.parent, 'refresh_annotation_list'):
-            self.parent.refresh_annotation_list()
+        # Refresh UI: completed annotations + pending image queue
+        self._refresh_ui_after_import(target_img_dir, imported_count)
         
         print(f"Import completed: {imported_count} files imported to {target_anno_dir}")
+
+    @staticmethod
+    def _json_missing_keypoints(json_path):
+        """True if LabelCraft JSON exists but annotations have no keypoints."""
+        try:
+            import json as json_module
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json_module.load(f)
+            anns = data.get('annotations') or []
+            if not anns:
+                return False
+            return not any(ann.get('keypoints') for ann in anns)
+        except Exception:
+            return False
+
+    def _refresh_ui_after_import(self, target_img_dir, imported_count):
+        """Reload completed list and fill pending queue so imported data is visible."""
+        parent = self.parent
+        if parent is None:
+            return
+
+        # Sync labels into UI combo / history
+        try:
+            if self.current_project and self.current_project.labels:
+                parent.label_hist = list(self.current_project.labels)
+                if hasattr(parent, 'default_label_combo_box'):
+                    parent.default_label_combo_box.update_items(parent.label_hist)
+                if hasattr(parent, 'update_combo_box'):
+                    parent.update_combo_box()
+        except Exception as e:
+            print(f'Warning: failed to sync labels to UI: {e}')
+
+        # Refresh completed annotations dock
+        if hasattr(parent, 'update_completed_annotations_list'):
+            parent.update_completed_annotations_list()
+        elif hasattr(parent, 'refresh_annotation_list'):
+            parent.refresh_annotation_list()
+
+        if imported_count <= 0:
+            return
+
+        # Add imported images into pending queue and open the first one
+        image_paths = []
+        if os.path.isdir(target_img_dir):
+            if hasattr(parent, 'scan_all_images'):
+                image_paths = parent.scan_all_images(target_img_dir)
+            else:
+                exts = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp', '.gif'}
+                for root, _dirs, files in os.walk(target_img_dir):
+                    for name in files:
+                        if os.path.splitext(name)[1].lower() in exts:
+                            image_paths.append(os.path.join(root, name))
+                image_paths.sort()
+
+        if not image_paths:
+            print(f'Warning: no images found under {target_img_dir} after import')
+            return
+
+        pending = getattr(parent, 'pending_list_widget', None)
+        if pending is not None:
+            existing = {pending.item(i).text() for i in range(pending.count())}
+            added = 0
+            for path in image_paths:
+                if path not in existing:
+                    pending.addItem(path)
+                    added += 1
+            print(f'Added {added} images to pending queue')
+
+        # Load first image so canvas shows imported annotations immediately
+        try:
+            if hasattr(parent, 'load_file'):
+                parent.load_file(image_paths[0])
+        except Exception as e:
+            print(f'Warning: failed to open first imported image: {e}')
     
     def _copy_image(self, base_name, source_dir, anno_file, target_img_dir):
         """
         Find and copy the corresponding image file.
-        
-        For YOLO format with directory structure, tries to find images based on
-        the relative path of the annotation file.
+
+        Supports:
+          - source/labels/*.txt  -> source/images/*
+          - source/train/labels -> source/train/images  (and valid/test)
+          - sibling images/ next to any labels/ folder
+          - recursive stem match under source_dir as last resort
         """
-        img_found = False
-        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.gif', '.webp']
-        
-        # For YOLO format, try to preserve directory structure
-        if anno_file.startswith(os.path.join(source_dir, 'labels')):
-            # Extract relative path from labels/ directory
-            rel_path = os.path.relpath(os.path.dirname(anno_file), 
-                                      os.path.join(source_dir, 'labels'))
-            
-            # Try to find image in corresponding images/ subdirectory
-            images_base = os.path.join(source_dir, 'images', rel_path)
-            if os.path.exists(images_base):
-                for ext in image_extensions:
-                    img_path = os.path.join(images_base, base_name + ext)
-                    if os.path.exists(img_path):
-                        # Create subdirectory in target if needed
-                        target_subdir = os.path.join(target_img_dir, rel_path)
-                        os.makedirs(target_subdir, exist_ok=True)
-                        shutil.copy2(img_path, os.path.join(target_subdir, os.path.basename(img_path)))
-                        img_found = True
-                        break
-        
-        # If not found yet, try standard locations
-        if not img_found:
-            search_dirs = [
-                source_dir,
-                os.path.join(source_dir, 'images'),
-                os.path.dirname(source_dir),
-                os.path.join(os.path.dirname(source_dir), 'images')
-            ]
-            
-            for search_dir in search_dirs:
-                if not os.path.exists(search_dir):
-                    continue
-                
-                for ext in image_extensions:
-                    img_path = os.path.join(search_dir, base_name + ext)
-                    if os.path.exists(img_path):
-                        shutil.copy2(img_path, os.path.join(target_img_dir, os.path.basename(img_path)))
-                        img_found = True
-                        break
-                
-                if img_found:
-                    break
-        
-        if not img_found:
-            print(f"Warning: Image not found for {base_name}")
+        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.gif', '.webp'}
+        source_dir = os.path.abspath(source_dir)
+        anno_file = os.path.abspath(anno_file)
+        target_img_dir = os.path.abspath(target_img_dir)
+        anno_dir = os.path.dirname(anno_file)
+        os.makedirs(target_img_dir, exist_ok=True)
+
+        def is_image(path):
+            return os.path.splitext(path)[1].lower() in image_extensions
+
+        def copy_one(img_path):
+            if not img_path or not os.path.isfile(img_path):
+                return False
+            dest = os.path.join(target_img_dir, os.path.basename(img_path))
+            if os.path.abspath(img_path) != os.path.abspath(dest):
+                shutil.copy2(img_path, dest)
+            return True
+
+        def find_in_dir(images_dir):
+            if not images_dir or not os.path.isdir(images_dir):
+                return None
+            # Exact common extensions (case-sensitive + lower)
+            for ext in ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.gif', '.webp',
+                        '.JPG', '.JPEG', '.PNG', '.BMP'):
+                candidate = os.path.join(images_dir, base_name + ext)
+                if os.path.isfile(candidate):
+                    return candidate
+            # Case-insensitive stem match inside this folder
+            try:
+                for name in os.listdir(images_dir):
+                    stem, ext = os.path.splitext(name)
+                    if stem == base_name and ext.lower() in image_extensions:
+                        return os.path.join(images_dir, name)
+            except OSError:
+                pass
+            return None
+
+        candidates = []
+
+        # 1) Sibling images/ next to labels/  (…/train/labels -> …/train/images)
+        if os.path.basename(anno_dir).lower() == 'labels':
+            candidates.append(os.path.join(os.path.dirname(anno_dir), 'images'))
+
+        # 2) Infer split name from path (.../train/labels/x.txt -> train)
+        parts = anno_file.replace('\\', '/').split('/')
+        for split in ('train', 'valid', 'val', 'test'):
+            if split in parts:
+                # source_dir/split/images and parent_of_labels/images already covered;
+                # also try source_dir/split/images explicitly
+                candidates.append(os.path.join(source_dir, split, 'images'))
+
+        # 3) Classic layouts
+        candidates.extend([
+            os.path.join(source_dir, 'images'),
+            os.path.join(os.path.dirname(source_dir), 'images'),
+            anno_dir,
+            source_dir,
+        ])
+
+        for folder in candidates:
+            found = find_in_dir(folder)
+            if found and copy_one(found):
+                return True
+
+        # 4) Last resort: recursive search by stem under source_dir (and its parent)
+        search_roots = [source_dir]
+        parent = os.path.dirname(source_dir)
+        if parent and parent not in search_roots:
+            search_roots.append(parent)
+
+        for root in search_roots:
+            if not os.path.isdir(root):
+                continue
+            for dirpath, dirnames, filenames in os.walk(root):
+                # Skip huge unrelated trees a bit: prefer images/labels dirs
+                dirnames.sort(key=lambda d: (0 if d.lower() in ('images', 'train', 'valid', 'val', 'test') else 1, d))
+                for name in filenames:
+                    stem, ext = os.path.splitext(name)
+                    if stem == base_name and ext.lower() in image_extensions:
+                        found = os.path.join(dirpath, name)
+                        if copy_one(found):
+                            return True
+
+        # Throttle warnings: store missing names on importer instance
+        if not hasattr(self, '_missing_image_names'):
+            self._missing_image_names = []
+        self._missing_image_names.append(base_name)
+        if len(self._missing_image_names) <= 5:
+            print(f"Warning: Image not found for {base_name} (label: {anno_file})")
+        elif len(self._missing_image_names) == 6:
+            print("Warning: more missing images... (further warnings suppressed)")
+        return False

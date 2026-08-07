@@ -159,12 +159,25 @@ class AnnotationConverter:
                         if len(annotations) == 0 and classes:
                             print(f"[read_yolo] Converting class_id={class_id} -> label='{label}' (classes has {len(classes)} entries)")
                         
-                        annotations.append({
+                        ann = {
                             'label': label,
                             'bbox': [x, y, w_abs, h_abs],
+                            'bbox_xyxy': [x, y, x + w_abs, y + h_abs],
                             'difficult': False,
                             'truncated': False
-                        })
+                        }
+                        # YOLO-Pose: remaining tokens are keypoints
+                        rest = parts[5:]
+                        if len(rest) >= 2 and len(rest) % 3 == 0:
+                            kpts = []
+                            for i in range(0, len(rest), 3):
+                                kx = float(rest[i]) * width
+                                ky = float(rest[i + 1]) * height
+                                kv = int(float(rest[i + 2]))
+                                kpts.append([kx, ky, kv])
+                            ann['keypoints'] = kpts
+                            ann['type'] = 'pose'
+                        annotations.append(ann)
         
         return {
             'image_path': image_path,
@@ -341,6 +354,13 @@ class AnnotationConverter:
         }
     
     @staticmethod
+    def _aabb_from_points(points):
+        """Return (xmin, ymin, xmax, ymax) from any non-empty point list."""
+        xs = [float(p[0]) for p in points]
+        ys = [float(p[1]) for p in points]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    @staticmethod
     def read_labelcraft_json(json_path):
         """Read LabelCraft JSON format and convert to internal format"""
         with open(json_path, 'r', encoding='utf-8') as f:
@@ -371,32 +391,53 @@ class AnnotationConverter:
         annotations = []
         for ann in data.get('annotations', []):
             label = ann.get('label', '')
-            
-            # Get bbox from points if bbox not directly available
-            if 'bbox' in ann:
+            points = ann.get('points') or []
+            ann_type = ann.get('type', 'rectangle')
+
+            # AABB: prefer bbox, else extents of all points (polygon N>=1, ellipse, etc.)
+            if 'bbox' in ann and ann['bbox']:
                 bbox = ann['bbox']  # [xmin, ymin, xmax, ymax]
-                x, y, w, h = bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]
-                print(f"  Annotation: {label}, bbox=[{x},{y},{w},{h}]")
-            elif 'points' in ann and len(ann['points']) >= 4:
-                # Convert polygon points to bbox
-                points = ann['points']
-                xs = [p[0] for p in points]
-                ys = [p[1] for p in points]
-                x = min(xs)
-                y = min(ys)
-                w = max(xs) - x
-                h = max(ys) - y
-                print(f"  Annotation: {label}, points->bbox=[{x},{y},{w},{h}]")
+                xmin, ymin, xmax, ymax = (
+                    float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
+                )
+            elif len(points) >= 1:
+                xmin, ymin, xmax, ymax = AnnotationConverter._aabb_from_points(points)
             else:
                 print(f"  Skipping annotation (no bbox or points): {ann}")
                 continue
-            
-            annotations.append({
+
+            x, y = xmin, ymin
+            w, h = max(0.0, xmax - xmin), max(0.0, ymax - ymin)
+            print(f"  Annotation: {label}, type={ann_type}, bbox=[{x},{y},{w},{h}]")
+
+            if ann.get('keypoints'):
+                ann_type = ann.get('type') or 'pose'
+
+            item = {
                 'label': label,
-                'bbox': [int(x), int(y), int(w), int(h)],
+                'bbox': [int(round(x)), int(round(y)), int(round(w)), int(round(h))],
+                'bbox_xyxy': [
+                    int(round(xmin)), int(round(ymin)),
+                    int(round(xmax)), int(round(ymax)),
+                ],
                 'difficult': ann.get('difficult', False),
-                'truncated': False
-            })
+                'truncated': ann.get('occluded', False),
+                'type': ann_type,
+                'points': [[float(p[0]), float(p[1])] for p in points],
+            }
+            if ann.get('keypoints'):
+                item['keypoints'] = ann['keypoints']
+            if ann.get('keypoint_names'):
+                item['keypoint_names'] = ann['keypoint_names']
+            if ann.get('skeleton'):
+                item['skeleton'] = ann['skeleton']
+            if ann.get('line_color') is not None:
+                item['line_color'] = ann['line_color']
+            if ann.get('fill_color') is not None:
+                item['fill_color'] = ann['fill_color']
+            if ann.get('line_width') is not None:
+                item['line_width'] = ann['line_width']
+            annotations.append(item)
         
         print(f"DEBUG: Total annotations parsed: {len(annotations)}")
         
@@ -476,12 +517,18 @@ class AnnotationConverter:
     
     @staticmethod
     def write_yolo(internal_data, output_path, classes_list):
-        """Write internal format to YOLO TXT"""
+        """
+        Write YOLO Detect TXT (class cx cy w h only).
+
+        Polygon / ellipse / circle / pose boxes are collapsed to axis-aligned
+        bounding boxes. Keypoints are intentionally NOT written (use YOLO-Pose
+        export for pose rows). YOLO-seg is out of scope for now.
+        """
         # Build class to ID mapping
         class_to_id = {cls: idx for idx, cls in enumerate(classes_list)}
         
-        width = internal_data['image_width']
-        height = internal_data['image_height']
+        width = max(1, int(internal_data['image_width']))
+        height = max(1, int(internal_data['image_height']))
         
         lines = []
         skipped_labels = []
@@ -493,15 +540,33 @@ class AnnotationConverter:
                 continue
             
             class_id = class_to_id[label]
-            x, y, w, h = ann['bbox']
-            
+            # Prefer xyxy; fall back to xywh bbox; then points extents
+            if ann.get('bbox_xyxy') and len(ann['bbox_xyxy']) >= 4:
+                xmin, ymin, xmax, ymax = [float(v) for v in ann['bbox_xyxy'][:4]]
+                w = max(0.0, xmax - xmin)
+                h = max(0.0, ymax - ymin)
+                x, y = xmin, ymin
+            elif ann.get('bbox') and len(ann['bbox']) >= 4:
+                x, y, w, h = [float(v) for v in ann['bbox'][:4]]
+            elif ann.get('points'):
+                xmin, ymin, xmax, ymax = AnnotationConverter._aabb_from_points(ann['points'])
+                x, y = xmin, ymin
+                w, h = max(0.0, xmax - xmin), max(0.0, ymax - ymin)
+            else:
+                continue
+
+            if w <= 0 or h <= 0 or width <= 0 or height <= 0:
+                continue
+
             # Convert to normalized center format
             x_center = (x + w / 2) / width
             y_center = (y + h / 2) / height
             w_norm = w / width
             h_norm = h / height
             
-            lines.append(f"{class_id} {x_center:.6f} {y_center:.6f} {w_norm:.6f} {h_norm:.6f}")
+            # Detect format only — never append keypoints here
+            line = f"{class_id} {x_center:.6f} {y_center:.6f} {w_norm:.6f} {h_norm:.6f}"
+            lines.append(line)
         
         # Only write file if there are valid annotations
         if lines:
@@ -513,6 +578,19 @@ class AnnotationConverter:
             # Don't create empty file
             print(f"Skipping {os.path.basename(output_path)}: all labels not in classes list {skipped_labels}")
             return False
+
+    @staticmethod
+    def write_yolo_pose(internal_data, output_path, classes_list, kpt_shape=(3, 3)):
+        """Write internal format to YOLO-Pose TXT (alias with explicit kpt padding)."""
+        from libs.yolo_pose_io import annotations_to_pose_txt
+        return annotations_to_pose_txt(
+            internal_data.get('annotations', []),
+            internal_data['image_width'],
+            internal_data['image_height'],
+            classes_list,
+            kpt_shape,
+            output_path,
+        )
     
     @staticmethod
     def write_createml(internal_data, output_path):
@@ -611,7 +689,7 @@ class AnnotationConverter:
     
     @staticmethod
     def write_labelcraft_json(internal_data, output_path):
-        """Write internal format to LabelCraft JSON"""
+        """Write internal format to LabelCraft JSON (preserves type/points/styles)."""
         from datetime import datetime
         
         # Ensure .json extension
@@ -619,7 +697,7 @@ class AnnotationConverter:
             output_path += '.json'
         
         data = {
-            'version': '1.0',
+            'version': '1.1',
             'image': {
                 'path': os.path.basename(internal_data['image_path']),
                 'width': internal_data['image_width'],
@@ -638,20 +716,62 @@ class AnnotationConverter:
         # Add annotations
         for idx, ann in enumerate(internal_data['annotations'], 1):
             x, y, w, h = ann['bbox']
+            has_kpts = bool(ann.get('keypoints'))
+            ann_type = ann.get('type') or ('pose' if has_kpts else 'rectangle')
+            xmin, ymin, xmax, ymax = int(x), int(y), int(x + w), int(y + h)
+
+            # Prefer original vertices (polygon); else AABB 4 corners
+            src_pts = ann.get('points') or []
+            if ann_type == 'polygon' and len(src_pts) >= 3:
+                points = [[int(round(p[0])), int(round(p[1]))] for p in src_pts]
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+                xmin, ymin, xmax, ymax = min(xs), min(ys), max(xs), max(ys)
+            elif len(src_pts) >= 2 and ann_type in ('ellipse', 'circle', 'rectangle', 'pose'):
+                points = [[int(round(p[0])), int(round(p[1]))] for p in src_pts]
+            else:
+                points = [
+                    [xmin, ymin],
+                    [xmax, ymin],
+                    [xmax, ymax],
+                    [xmin, ymax],
+                ]
+
             annotation = {
                 'id': idx,
                 'label': ann['label'],
-                'type': 'rectangle',
-                'bbox': [int(x), int(y), int(x + w), int(y + h)],
-                'points': [
-                    [int(x), int(y)],
-                    [int(x + w), int(y)],
-                    [int(x + w), int(y + h)],
-                    [int(x), int(y + h)]
-                ],
+                'type': ann_type,
+                'bbox': [xmin, ymin, xmax, ymax],
+                'points': points,
                 'difficult': ann.get('difficult', False),
-                'occluded': False
+                'occluded': bool(ann.get('truncated', False)),
             }
+            if ann.get('line_color') is not None:
+                annotation['line_color'] = list(ann['line_color'])
+            if ann.get('fill_color') is not None:
+                annotation['fill_color'] = list(ann['fill_color'])
+            if ann.get('line_width') is not None:
+                annotation['line_width'] = float(ann['line_width'])
+            if has_kpts:
+                kpts = []
+                for kp in ann['keypoints']:
+                    if isinstance(kp, dict):
+                        kpts.append([
+                            float(kp.get('x', 0)),
+                            float(kp.get('y', 0)),
+                            int(kp.get('v', 2)),
+                        ])
+                    else:
+                        kpts.append([
+                            float(kp[0]),
+                            float(kp[1]),
+                            int(kp[2]) if len(kp) > 2 else 2,
+                        ])
+                annotation['keypoints'] = kpts
+                if ann.get('keypoint_names'):
+                    annotation['keypoint_names'] = list(ann['keypoint_names'])
+                if ann.get('skeleton'):
+                    annotation['skeleton'] = [list(e) for e in ann['skeleton']]
             data['annotations'].append(annotation)
         
         # Write to file

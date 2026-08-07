@@ -80,6 +80,27 @@ class ZoomWidget(QSlider):
         container.setLayout(layout)
         return container
 
+    def create_compact_vertical_widget(self):
+        """Narrow vertical slider for icon-only side toolbar."""
+        self.setOrientation(Qt.Orientation.Vertical)
+        self.setFixedHeight(72)
+        self.setFixedWidth(22)
+        self.value_label.setMinimumWidth(0)
+        self.value_label.setFixedWidth(36)
+        self.value_label.setStyleSheet('font-size: 10px;')
+        container = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(1)
+        layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self.value_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        container.setLayout(layout)
+        container.setFixedWidth(40)
+        container.setToolTip(self.toolTip())
+        return container
+
     def minimumSizeHint(self):
-        # Slider needs more width for better usability
+        if self.orientation() == Qt.Orientation.Vertical:
+            return QSize(22, 72)
         return QSize(200, 20)

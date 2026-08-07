@@ -10,6 +10,7 @@ from libs.create_ml_io import CreateMLWriter
 from libs.pascal_voc_io import PascalVocWriter
 from libs.pascal_voc_io import XML_EXT
 from libs.yolo_io import YOLOWriter
+from libs.yolo_pose_io import YOLOPoseWriter
 from libs.coco_io import COCOWriter
 from libs.csv_io import CSVWriter
 from libs.json_io import LabelCraftJSONWriter, LabelCraftJSONReader
@@ -198,7 +199,7 @@ class LabelFile(object):
     
     def save_json_format(self, filename, shapes, image_path, image_data, class_list=None,
                          line_color=None, fill_color=None, database_src=None):
-        """Save annotations in LabelCraft JSON format"""
+        """Save annotations in LabelCraft JSON format (supports pose keypoints)."""
         img_folder_path = os.path.dirname(image_path)
         img_folder_name = os.path.split(img_folder_path)[-1]
         img_file_name = os.path.basename(image_path)
@@ -222,10 +223,64 @@ class LabelFile(object):
             points = shape['points']
             label = shape['label']
             difficult = int(shape['difficult'])
+            shape_type = shape.get('shape_type') or shape.get('type') or 'rectangle'
+            if shape_type == 'polygon':
+                writer.add_polygon(
+                    points, label, difficult,
+                    line_color=shape.get('line_color'),
+                    fill_color=shape.get('fill_color'),
+                    line_width=shape.get('line_width'),
+                )
+                continue
             bnd_box = LabelFile.convert_points_to_bnd_box(points)
-            writer.add_bnd_box(bnd_box[0], bnd_box[1], bnd_box[2], bnd_box[3], label, difficult)
+            if shape_type in ('ellipse', 'circle'):
+                writer.add_ellipse(
+                    bnd_box[0], bnd_box[1], bnd_box[2], bnd_box[3], label, difficult,
+                    shape_type=shape_type,
+                    line_color=shape.get('line_color'),
+                    fill_color=shape.get('fill_color'),
+                    line_width=shape.get('line_width'),
+                )
+                continue
+            writer.add_bnd_box(
+                bnd_box[0], bnd_box[1], bnd_box[2], bnd_box[3], label, difficult,
+                keypoints=shape.get('keypoints'),
+                shape_type=shape_type,
+                keypoint_names=shape.get('keypoint_names'),
+                skeleton=shape.get('skeleton'),
+                line_color=shape.get('line_color'),
+                fill_color=shape.get('fill_color'),
+                line_width=shape.get('line_width'),
+            )
         
         writer.write(target_file=filename)
+        return
+    
+    def save_yolo_pose_format(self, filename, shapes, image_path, image_data, class_list,
+                              kpt_shape=(3, 3), line_color=None, fill_color=None, database_src=None):
+        """Save annotations in YOLO-Pose TXT format."""
+        img_file_name = os.path.basename(image_path)
+        if isinstance(image_data, QImage):
+            image = image_data
+        else:
+            image = QImage()
+            image.load(image_path)
+        image_shape = [image.height(), image.width(),
+                       1 if image.isGrayscale() else 3]
+
+        writer = YOLOPoseWriter(image_shape, class_list=list(class_list or []), kpt_shape=kpt_shape)
+        writer.verified = self.verified
+        for shape in shapes:
+            points = shape['points']
+            label = shape['label']
+            bnd_box = LabelFile.convert_points_to_bnd_box(points)
+            writer.add_pose(
+                bnd_box[0], bnd_box[1], bnd_box[2], bnd_box[3],
+                label,
+                shape.get('keypoints') or [],
+                difficult=int(shape.get('difficult', 0)),
+            )
+        writer.save(target_file=filename, class_list=list(class_list or []))
         return
 
     def toggle_verify(self):

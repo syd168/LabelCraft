@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=LabelCraft
+GenericName=Image Annotation
+Comment=Graphical image annotation for object detection and pose estimation
+Exec=labelcraft %F
+Icon=labelcraft
+Terminal=false
+Categories=Graphics;Education;Science;
+MimeType=application/x-labelcraft-project;
+StartupNotify=true
+StartupWMClass=LabelCraft
+Keywords=annotation;yolo;pose;label;dataset;

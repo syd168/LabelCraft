@@ -8,11 +8,13 @@
 <file alias="file">resources/icons/file.png</file>
 <file alias="labels">resources/icons/labels.png</file>
 <file alias="new">resources/icons/objects.png</file>
+<file alias="rectangle">resources/icons/rectangle.png</file>
 <file alias="close">resources/icons/close.png</file>
 <file alias="fit-width">resources/icons/fit-width.png</file>
 <file alias="fit-window">resources/icons/fit-window.png</file>
 <file alias="undo">resources/icons/undo.png</file>
 <file alias="hide">resources/icons/eye.png</file>
+<file alias="show_boxes">resources/icons/show_boxes.png</file>
 <file alias="quit">resources/icons/quit.png</file>
 <file alias="copy">resources/icons/copy.png</file>
 <file alias="edit">resources/icons/edit.png</file>
@@ -23,6 +25,7 @@
 <file alias="format_createml">resources/icons/format_createml.png</file>
 <file alias="save-as">resources/icons/save-as.png</file>
 <file alias="color">resources/icons/color.png</file>
+<file alias="shape_style">resources/icons/shape_style.png</file>
 <file alias="color_line">resources/icons/color_line.png</file>
 <file alias="zoom">resources/icons/zoom.png</file>
 <file alias="zoom-in">resources/icons/zoom-in.png</file>
@@ -35,5 +38,9 @@
 <file alias="prev">resources/icons/prev.png</file>
 <file alias="resetall">resources/icons/resetall.png</file>
 <file alias="verify">resources/icons/verify.png</file>
+<file alias="pose">resources/icons/pose.png</file>
+<file alias="polygon">resources/icons/polygon.png</file>
+<file alias="ellipse">resources/icons/ellipse.png</file>
+<file alias="circle">resources/icons/circle.png</file>
 </qresource>
 </RCC>

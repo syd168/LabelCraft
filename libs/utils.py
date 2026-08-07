@@ -1,6 +1,7 @@
 from math import sqrt
 from libs.ustr import ustr
 import hashlib
+import os
 import re
 import sys
 
@@ -27,6 +28,189 @@ def filter_platform_argv(argv):
 
 def new_icon(icon):
     return QIcon(':/' + icon)
+
+
+def app_icon_file_path():
+    """Filesystem path to app.png when present (source tree or packaged data)."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(root, 'resources', 'icons', 'app.png')
+
+
+def load_app_pixmap():
+    """
+    Load app icon pixmap.
+
+    Works for both source checkout (resources/icons/app.png) and pip installs
+    (Qt resource :/app from libs/resources.py).
+    """
+    path = app_icon_file_path()
+    if os.path.isfile(path):
+        pix = QPixmap(path)
+        if not pix.isNull():
+            return pix
+    pix = QPixmap(':/app')
+    if not pix.isNull():
+        return pix
+    return QPixmap()
+
+
+def app_icon():
+    """
+    Application icon with multiple sizes for taskbar / dock.
+
+    Qt resource :/app alone is often a single huge pixmap; panels prefer
+    16–256px entries. Also fall back to the on-disk PNG when available.
+    """
+    icon = QIcon()
+    pix = load_app_pixmap()
+    if pix.isNull():
+        return new_icon('app')
+
+    for size in (16, 24, 32, 48, 64, 128, 256):
+        icon.addPixmap(_square_pixmap(pix, size))
+    icon.addPixmap(pix)
+    return icon
+
+
+def _square_pixmap(pix, size):
+    """Scale to an exact square size (taskbars expect N×N pixmaps)."""
+    return pix.scaled(
+        size, size,
+        Qt.AspectRatioMode.IgnoreAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+
+
+def _linux_main_script_path():
+    """Resolve LabelCraft/main.py for desktop Exec= entries (source tree)."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(root, 'main.py')
+
+
+def _linux_exec_line():
+    """
+    Desktop Exec= for source runs and pip installs.
+
+    Prefer the installed `labelcraft` script; otherwise fall back to
+    `python main.py` in a source checkout.
+    """
+    import shutil
+
+    which = shutil.which('labelcraft')
+    if which:
+        return f'"{which}" %F'
+
+    # gui_scripts / direct launch: argv[0] may already be the wrapper
+    argv0 = os.path.abspath(sys.argv[0]) if sys.argv else ''
+    base = os.path.basename(argv0).lower()
+    if argv0 and os.path.isfile(argv0) and base in ('labelcraft', 'labelcraft.exe'):
+        return f'"{argv0}" %F'
+
+    main_py = _linux_main_script_path()
+    if os.path.isfile(main_py):
+        return f'{sys.executable} "{main_py}" %F'
+
+    # pip layout without a PATH entry (rare): invoke package entry point
+    return f'{sys.executable} -c "from libs.cli import main; raise SystemExit(main())" %F'
+
+
+def ensure_linux_desktop_integration(app_name='LabelCraft'):
+    """
+    Install a user-local .desktop + hicolor icons so Wayland/X11 docks can
+    match the running window (via StartupWMClass / desktop-file-name) to
+    LabelCraft's icon instead of a generic Python icon.
+
+    Icon pixels come from disk PNG or embedded Qt resource :/app, so this
+    also works after `pip install LabelCraft`.
+    """
+    if not sys.platform.startswith('linux'):
+        return
+
+    try:
+        home = os.path.expanduser('~')
+        apps_dir = os.path.join(home, '.local', 'share', 'applications')
+        icons_root = os.path.join(home, '.local', 'share', 'icons', 'hicolor')
+        desktop_path = os.path.join(apps_dir, 'labelcraft.desktop')
+
+        os.makedirs(apps_dir, exist_ok=True)
+
+        pix = load_app_pixmap()
+        if pix.isNull():
+            return
+
+        icon_src = app_icon_file_path()
+        for size in (16, 24, 32, 48, 64, 128, 256):
+            size_dir = os.path.join(icons_root, f'{size}x{size}', 'apps')
+            os.makedirs(size_dir, exist_ok=True)
+            out = os.path.join(size_dir, 'labelcraft.png')
+            refresh = not os.path.isfile(out)
+            if not refresh and os.path.isfile(icon_src):
+                refresh = os.path.getmtime(icon_src) > os.path.getmtime(out)
+            if refresh:
+                _square_pixmap(pix, size).save(out, 'PNG')
+
+        exec_line = _linux_exec_line()
+        desktop = (
+            '[Desktop Entry]\n'
+            'Type=Application\n'
+            'Version=1.0\n'
+            f'Name={app_name}\n'
+            'GenericName=Image Annotation\n'
+            'Comment=Graphical image annotation for object detection and pose\n'
+            f'Exec={exec_line}\n'
+            'Icon=labelcraft\n'
+            'Terminal=false\n'
+            'Categories=Graphics;Education;Science;\n'
+            'StartupNotify=true\n'
+            f'StartupWMClass={app_name}\n'
+            'Keywords=annotation;yolo;pose;label;dataset;\n'
+        )
+        # Rewrite when Exec/path changed (e.g. different venv)
+        need_write = True
+        if os.path.isfile(desktop_path):
+            try:
+                with open(desktop_path, 'r', encoding='utf-8') as f:
+                    need_write = f.read() != desktop
+            except OSError:
+                need_write = True
+        if need_write:
+            with open(desktop_path, 'w', encoding='utf-8') as f:
+                f.write(desktop)
+    except Exception as e:
+        print(f'Warning: Linux desktop icon setup failed: {e}')
+
+
+def configure_app_identity(app, app_name='LabelCraft'):
+    """
+    Set application identity so Linux/Windows taskbars show the real icon
+    instead of a generic / Python icon.
+    """
+    app.setApplicationName(app_name)
+    app.setApplicationDisplayName(app_name)
+    app.setOrganizationName(app_name)
+    # Matches labelcraft.desktop (basename without .desktop)
+    try:
+        app.setDesktopFileName('labelcraft')
+    except Exception:
+        pass
+
+    icon = app_icon()
+    app.setWindowIcon(icon)
+
+    # Windows: without an AppUserModelID, explorer groups the process under
+    # python.exe and shows the Python icon in the taskbar.
+    if sys.platform.startswith('win'):
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                f'{app_name}.App.1.0'
+            )
+        except Exception as e:
+            print(f'Warning: failed to set AppUserModelID: {e}')
+    elif sys.platform.startswith('linux'):
+        ensure_linux_desktop_integration(app_name)
+
+    return icon
 
 
 def new_button(text, icon=None, slot=None):
@@ -97,7 +281,7 @@ def generate_color_by_text(text):
     r = int((hash_code / 255) % 255)
     g = int((hash_code / 65025) % 255)
     b = int((hash_code / 16581375) % 255)
-    return QColor(r, g, b, 100)
+    return QColor(r, g, b, 40)
 
 
 def have_qstring():

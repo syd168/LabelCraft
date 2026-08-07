@@ -28,17 +28,29 @@ from libs.zoomWidget import ZoomWidget
 from libs.lightWidget import LightWidget
 from libs.labelDialog import LabelDialog
 from libs.colorDialog import ColorDialog
+from libs.shapeStyleDialog import ShapeStyleDialog
+from libs.annotation_undo import AnnotationUndoStack
 from libs.labelFile import LabelFile, LabelFileError, LabelFileFormat
 from libs.toolBar import ToolBar
 from libs.pascal_voc_io import PascalVocReader
 from libs.pascal_voc_io import XML_EXT
 from libs.yolo_io import YoloReader
 from libs.yolo_io import TXT_EXT
+from libs.yolo_pose_io import (
+    YOLOPoseReader,
+    file_looks_like_pose,
+    export_yolo_pose_dataset,
+    parse_data_yaml,
+    find_data_yaml,
+)
+from libs.json_io import LabelCraftJSONReader
 from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-from libs.project import Project, RecentProjectsManager
+from libs.project import (
+    Project, RecentProjectsManager, PROJECT_EXT, project_file_filter,
+)
 from libs.newProjectDialog import NewProjectDialog
 from libs.theme_manager import apply_system_theme
 from libs import __version__
@@ -57,8 +69,9 @@ class WindowMixin(object):
     def toolbar(self, title, actions=None):
         toolbar = ToolBar(title)
         toolbar.setObjectName(u'%sToolBar' % title)
-        # Use icon and text style for better visibility
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        # Icon-only: save space; hover shows tooltip
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        toolbar.setIconSize(QSize(22, 22))
         if actions:
             add_actions(toolbar, actions)
         
@@ -77,6 +90,8 @@ class MainWindow(QMainWindow, WindowMixin):
     def __init__(self, default_filename=None, default_prefdef_class_file=None, default_save_dir=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
+        # Taskbar / title-bar icon (also set on QApplication in get_main_app)
+        self.setWindowIcon(app_icon())
 
         # Load setting in the main thread
         self.settings = Settings()
@@ -183,37 +198,47 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Create unified right panel with all sections
         right_panel_layout = QVBoxLayout()
-        right_panel_layout.setContentsMargins(5, 5, 5, 5)
-        right_panel_layout.setSpacing(10)
+        right_panel_layout.setContentsMargins(3, 3, 3, 3)
+        right_panel_layout.setSpacing(6)
         
-        # Section 1: Output settings
-        self.output_group = QGroupBox(self.get_str('outputSettings'))
+        # Section 1: Project info (path / format / default label)
+        self.output_group = QGroupBox(self.get_str('projectInfoGroup'))
         output_layout = QVBoxLayout()
-        output_layout.setSpacing(5)
+        output_layout.setContentsMargins(4, 4, 4, 4)
+        output_layout.setSpacing(4)
         
-        # Output path (read-only label)
+        # Project save location (read-only; "..." opens folder in file manager)
         output_path_layout = QHBoxLayout()
-        self.output_path_label = QLabel(self.get_str('outputPath'))
+        output_path_layout.setSpacing(4)
+        self.output_path_label = QLabel(self.get_str('projectDirLabel'))
         self.output_dir_label = QLabel(self.get_str('notSet'))
-        self.output_dir_label.setStyleSheet('padding: 2px;')
-        output_path_layout.addWidget(self.output_path_label)
-        output_path_layout.addWidget(self.output_dir_label)
-        output_path_layout.addStretch()
+        self.output_dir_label.setStyleSheet('padding: 1px;')
+        self.output_dir_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._project_location_path = None
+        self.open_project_dir_btn = QPushButton('...')
+        self.open_project_dir_btn.setFixedWidth(28)
+        self.open_project_dir_btn.setToolTip(self.get_str('openProjectDirTip'))
+        self.open_project_dir_btn.setEnabled(False)
+        self.open_project_dir_btn.clicked.connect(self.open_project_dir_in_explorer)
+        output_path_layout.addWidget(self.output_path_label, 0)
+        output_path_layout.addWidget(self.output_dir_label, 1)
+        output_path_layout.addWidget(self.open_project_dir_btn, 0)
         output_layout.addLayout(output_path_layout)
         
         # Output format (read-only label)
         output_format_layout = QHBoxLayout()
+        output_format_layout.setSpacing(4)
         self.output_format_title_label = QLabel(self.get_str('outputFormat'))
         self.output_format_label = QLabel(self.get_str('exportFormatVOC').split('(')[0].strip())  # Extract 'PASCAL VOC' without extension
-        self.output_format_label.setStyleSheet('padding: 2px;')
-        output_format_layout.addWidget(self.output_format_title_label)
-        output_format_layout.addWidget(self.output_format_label)
-        output_format_layout.addStretch()
+        self.output_format_label.setStyleSheet('padding: 1px;')
+        output_format_layout.addWidget(self.output_format_title_label, 0)
+        output_format_layout.addWidget(self.output_format_label, 1)
         output_layout.addLayout(output_format_layout)
         
         # Default label (checkbox + combo in same row)
         default_label_layout = QHBoxLayout()
-        default_label_layout.setSpacing(5)
+        default_label_layout.setSpacing(4)
         
         self.use_default_label_checkbox = QCheckBox(self.get_str('defaultLabel'))
         self.use_default_label_checkbox.setChecked(False)
@@ -225,7 +250,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.default_label_combo_box.setVisible(False)
         
         default_label_layout.addWidget(self.use_default_label_checkbox)
-        default_label_layout.addWidget(self.default_label_combo_box)
+        default_label_layout.addWidget(self.default_label_combo_box, 1)
         output_layout.addLayout(default_label_layout)
         
         self.output_group.setLayout(output_layout)
@@ -234,7 +259,8 @@ class MainWindow(QMainWindow, WindowMixin):
         # Section 3: Label filter (combo box) - filter shapes by label
         self.filter_label_group = QGroupBox(self.get_str('labelFilter'))
         filter_label_layout = QVBoxLayout()
-        filter_label_layout.setSpacing(5)
+        filter_label_layout.setContentsMargins(4, 4, 4, 4)
+        filter_label_layout.setSpacing(4)
         # Initialize with empty list, will be updated when loading labels
         self.combo_box = ComboBox(self, items=[])
         filter_label_layout.addWidget(self.combo_box)
@@ -244,7 +270,8 @@ class MainWindow(QMainWindow, WindowMixin):
         # Section 4: Label list
         self.label_list_group = QGroupBox(self.get_str('labelList'))
         label_list_layout_inner = QVBoxLayout()
-        label_list_layout_inner.setSpacing(5)
+        label_list_layout_inner.setContentsMargins(4, 4, 4, 4)
+        label_list_layout_inner.setSpacing(4)
         
         self.label_list.itemActivated.connect(self.label_selection_changed)
         self.label_list.itemSelectionChanged.connect(self.label_selection_changed)
@@ -258,7 +285,8 @@ class MainWindow(QMainWindow, WindowMixin):
         # Section 5: Completed annotations (scan from annotations directory)
         self.completed_group = QGroupBox(self.get_str('completedAnnotations'))
         completed_layout = QVBoxLayout()
-        completed_layout.setSpacing(5)
+        completed_layout.setContentsMargins(4, 4, 4, 4)
+        completed_layout.setSpacing(4)
         
         self.file_list_widget.itemDoubleClicked.connect(self.file_item_double_clicked)
         completed_layout.addWidget(self.file_list_widget)
@@ -311,6 +339,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.selectionChanged.connect(self.shape_selection_changed)
         self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
         self.canvas.shapeDoubleClicked.connect(self.edit_label)
+        self.canvas.keypointPlacementProgress.connect(self.on_keypoint_placement_progress)
+        self.canvas.keypointPlacementFinished.connect(self.on_keypoint_placement_finished)
+        self.canvas.editAboutToBegin.connect(self.on_annotation_edit_about_to_begin)
+        self.canvas.editGestureFinished.connect(self.on_annotation_edit_gesture_finished)
 
         # Create central widget with splitter (canvas + pending queue)
         central_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -355,9 +387,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.setCentralWidget(central_splitter)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self.dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-        # Set reasonable default width for right panel (250 pixels)
-        self.dock.setMinimumWidth(200)
-        self.dock.setMaximumWidth(350)
+        # Compact right rail — leave more room for the canvas
+        self.dock.setMinimumWidth(160)
+        self.dock.setMaximumWidth(260)
+        self.resizeDocks([self.dock], [200], Qt.Orientation.Horizontal)
 
         self.dock_features = QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
         self.dock.setFeatures(self.dock.features() ^ self.dock_features)
@@ -397,25 +430,27 @@ class MainWindow(QMainWindow, WindowMixin):
         quit = action(self.get_str('quit'), self.close,
                       'Ctrl+Q', 'quit', self.get_str('quitApp'))
 
+        # Legacy labelImg open actions — kept for internal/callers, no shortcuts
+        # (avoid stealing Ctrl+O / Ctrl+U from the project workflow).
         open = action(self.get_str('openFile'), self.open_file,
-                      'Ctrl+O', 'open', self.get_str('openFileDetail'))
+                      None, 'open', self.get_str('openFileDetail'))
 
         open_dir = action(self.get_str('openDir'), self.open_dir_dialog,
-                          'Ctrl+u', 'open', self.get_str('openDir'))
+                          None, 'open', self.get_str('openDir'))
 
         change_save_dir = action(self.get_str('changeSaveDir'), self.change_save_dir_dialog,
-                                 'Ctrl+r', 'open', self.get_str('changeSavedAnnotationDir'))
+                                 None, 'open', self.get_str('changeSavedAnnotationDir'))
 
         open_annotation = action(self.get_str('openAnnotation'), self.open_annotation_dialog,
-                                 'Ctrl+Shift+O', 'open', self.get_str('openAnnotationDetail'))
-        copy_prev_bounding = action(self.get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+v', 'copy',
+                                 None, 'open', self.get_str('openAnnotationDetail'))
+        copy_prev_bounding = action(self.get_str('copyPrevBounding'), self.copy_previous_bounding_boxes, 'Ctrl+V', 'copy',
                                     self.get_str('copyPrevBounding'))
         
         # Data menu actions: import and export
         import_annotations = action(self.get_str('importAnnotations'), self.import_annotations_dialog,
                                     'Ctrl+I', 'open', self.get_str('importAnnotationsDetail'))
         export_annotations = action(self.get_str('exportAnnotations'), self.export_annotations_dialog,
-                                    'Ctrl+E', 'save-as', self.get_str('exportAnnotationsDetail'))
+                                    'Ctrl+Shift+E', 'save-as', self.get_str('exportAnnotationsDetail'))
         
         # Project management actions
         new_project = action(self.get_str('newProject'), self.new_project_dialog,
@@ -423,9 +458,9 @@ class MainWindow(QMainWindow, WindowMixin):
         open_project = action(self.get_str('openProject'), self.open_project_dialog,
                              'Ctrl+O', 'open', self.get_str('openProjectDetail'))
         edit_project = action(self.get_str('editProject'), self.edit_project_dialog,
-                             'Ctrl+E', 'edit', self.get_str('editProjectDetail'), enabled=False)
+                             'Ctrl+Alt+E', 'edit', self.get_str('editProjectDetail'), enabled=False)
         save_project = action(self.get_str('saveProject'), self.save_project,
-                             'Ctrl+S', 'save', self.get_str('saveProjectDetail'), enabled=False)
+                             'Ctrl+Alt+S', 'save', self.get_str('saveProjectDetail'), enabled=False)
         close_project = action(self.get_str('closeProject'), self.close_project,
                               'Ctrl+Shift+C', 'close', self.get_str('closeProjectDetail'), enabled=False)
 
@@ -455,6 +490,7 @@ class MainWindow(QMainWindow, WindowMixin):
                                   checkable=True)
         filter_unverified.setChecked(True)  # Default to showing verification status
 
+        # Annotation save — primary Ctrl+S (project save uses Ctrl+Alt+S).
         save = action(self.get_str('save'), self.save_file,
                       'Ctrl+S', 'save', self.get_str('saveDetail'), enabled=False)
 
@@ -475,8 +511,9 @@ class MainWindow(QMainWindow, WindowMixin):
                 print(f"Warning: Unknown format {format}, defaulting to PASCAL_VOC")
                 return '&PascalVOC', 'format_voc'
 
+        # Legacy format toggle — no menu / no shortcut (export dialog owns formats).
         save_format = action(get_format_meta(self.label_file_format)[0],
-                             self.change_format, 'Ctrl+Y',
+                             self.change_format, None,
                              get_format_meta(self.label_file_format)[1],
                              self.get_str('changeSaveFormat'), enabled=True)
 
@@ -485,29 +522,50 @@ class MainWindow(QMainWindow, WindowMixin):
 
         reset_all = action(self.get_str('resetAll'), self.reset_all, None, 'resetall', self.get_str('resetAllDetail'))
 
+        # Hidden from Edit menu — prefer shapeStyle; kept for settings/API.
         color1 = action(self.get_str('boxLineColor'), self.choose_color1,
-                        'Ctrl+L', 'color_line', self.get_str('boxLineColorDetail'))
+                        None, 'color_line', self.get_str('boxLineColorDetail'))
 
-        create_mode = action(self.get_str('crtBox'), self.set_create_mode,
-                             'w', 'new', self.get_str('crtBoxDetail'), enabled=False)
+        create_mode = action(self.get_str('crtRect'), self.set_create_mode,
+                             'w', 'rectangle', self.get_str('crtRectDetail'), enabled=False)
+        create_pose_mode = action(self.get_str('crtPose'), self.set_create_pose_mode,
+                                  'p', 'pose', self.get_str('crtPoseDetail'), enabled=False)
+        create_polygon_mode = action(self.get_str('crtPoly'), self.set_create_polygon_mode,
+                                     'g', 'polygon', self.get_str('crtPolyDetail'), enabled=False)
+        create_ellipse_mode = action(self.get_str('crtEllipse'), self.set_create_ellipse_mode,
+                                     'e', 'ellipse', self.get_str('crtEllipseDetail'), enabled=False)
+        create_circle_mode = action(self.get_str('crtCircle'), self.set_create_circle_mode,
+                                    'c', 'circle', self.get_str('crtCircleDetail'), enabled=False)
         edit_mode = action(self.get_str('editBox'), self.set_edit_mode,
                            'Ctrl+J', 'edit', self.get_str('editBoxDetail'), enabled=False)
 
-        create = action(self.get_str('crtBox'), self.create_shape,
-                        'w', 'new', self.get_str('crtBoxDetail'), enabled=False)
+        create = action(self.get_str('crtRect'), self.create_shape,
+                        'w', 'rectangle', self.get_str('crtRectDetail'), enabled=False)
+        create_pose = action(self.get_str('crtPose'), self.create_pose_shape,
+                             'p', 'pose', self.get_str('crtPoseDetail'), enabled=False)
+        create_polygon = action(self.get_str('crtPoly'), self.create_polygon_shape,
+                                'g', 'polygon', self.get_str('crtPolyDetail'), enabled=False)
+        create_ellipse = action(self.get_str('crtEllipse'), self.create_ellipse_shape,
+                                'e', 'ellipse', self.get_str('crtEllipseDetail'), enabled=False)
+        create_circle = action(self.get_str('crtCircle'), self.create_circle_shape,
+                               'c', 'circle', self.get_str('crtCircleDetail'), enabled=False)
         delete = action(self.get_str('delBox'), self.delete_selected_shape,
                         'Delete', 'delete', self.get_str('delBoxDetail'), enabled=False)
         copy = action(self.get_str('dupBox'), self.copy_selected_shape,
                       'Ctrl+D', 'copy', self.get_str('dupBoxDetail'),
                       enabled=False)
+        undo = action(self.get_str('undoAnnotation'), self.undo_annotation_edit,
+                      'Ctrl+Z', 'undo', self.get_str('undoAnnotationDetail'),
+                      enabled=False)
 
+        # Hidden from View menu; still used if settings restore advanced mode.
         advanced_mode = action(self.get_str('advancedMode'), self.toggle_advanced_mode,
-                               'Ctrl+Shift+A', None, self.get_str('advancedModeDetail'),
+                               None, None, self.get_str('advancedModeDetail'),
                                checkable=True)
 
         # Combined show/hide labels toggle
         toggle_labels = action(self.get_str('showAllBox'), self.toggle_all_labels,
-                              'Ctrl+H', None, self.get_str('showAllBoxDetail'),
+                              'Ctrl+H', 'show_boxes', self.get_str('showAllBoxDetail'),
                               checkable=True, enabled=False)
         toggle_labels.setChecked(True)  # Default to showing all labels
 
@@ -522,9 +580,8 @@ class MainWindow(QMainWindow, WindowMixin):
         zoom = QWidgetAction(self)
         zoom.setDefaultWidget(zoom_widget_container)
         self.zoom_widget.setToolTip(
-            u"Zoom in or out of the image. Also accessible with"
-            " %s and %s from the canvas." % (format_shortcut("Ctrl+[-+]"),
-                                             format_shortcut("Ctrl+Wheel")))
+            self.get_str('zoomWidgetTip').format(
+                format_shortcut("Ctrl+[-+]"), format_shortcut("Ctrl+Wheel")))
         self.zoom_widget.setEnabled(False)
 
         zoom_in = action(self.get_str('zoomin'), partial(self.add_zoom, 10),
@@ -556,9 +613,9 @@ class MainWindow(QMainWindow, WindowMixin):
         light = QWidgetAction(self)
         light.setDefaultWidget(light_widget_container)
         self.light_widget.setToolTip(
-            u"Brighten or darken current image. Also accessible with"
-            " %s and %s from the canvas." % (format_shortcut("Ctrl+Shift+[-+]"),
-                                             format_shortcut("Ctrl+Shift+Wheel")))
+            self.get_str('lightWidgetTip').format(
+                format_shortcut("Ctrl+Shift+[-+]"),
+                format_shortcut("Ctrl+Shift+Wheel")))
         self.light_widget.setEnabled(False)
 
         light_brighten = action(self.get_str('lightbrighten'), partial(self.add_light, 10),
@@ -578,12 +635,9 @@ class MainWindow(QMainWindow, WindowMixin):
                       enabled=False)
         self.edit_button.setDefaultAction(edit)
 
-        shape_line_color = action(self.get_str('shapeLineColor'), self.choose_shape_line_color,
-                                  icon='color_line', tip=self.get_str('shapeLineColorDetail'),
-                                  enabled=False)
-        shape_fill_color = action(self.get_str('shapeFillColor'), self.choose_shape_fill_color,
-                                  icon='color', tip=self.get_str('shapeFillColorDetail'),
-                                  enabled=False)
+        shape_style = action(self.get_str('shapeStyle'), self.choose_shape_style,
+                             icon='shape_style', tip=self.get_str('shapeStyleDetail'),
+                             enabled=False)
 
         labels = self.dock.toggleViewAction()
         labels.setText(self.get_str('showHide'))
@@ -596,9 +650,15 @@ class MainWindow(QMainWindow, WindowMixin):
         self.label_list.customContextMenuRequested.connect(
             self.pop_label_list_menu)
 
-        # Draw squares/rectangles
+        # Completed-annotations list: set verified / unverified via context menu.
+        completed_menu = QMenu()
+        add_actions(completed_menu, (set_verified, set_unverified))
+        self.file_list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.file_list_widget.customContextMenuRequested.connect(
+            self.pop_completed_list_menu)
+
+        # Draw squares/rectangles (hidden from Edit menu; setting still honored)
         self.draw_squares_option = QAction(self.get_str('drawSquares'), self)
-        self.draw_squares_option.setShortcut('Ctrl+Shift+R')
         self.draw_squares_option.setCheckable(True)
         self.draw_squares_option.setChecked(settings.get(SETTING_DRAW_SQUARE, False))
         self.draw_squares_option.triggered.connect(self.toggle_draw_square)
@@ -606,26 +666,37 @@ class MainWindow(QMainWindow, WindowMixin):
         # Store actions for further handling.
         self.actions = Struct(save=save, save_format=save_format, open=open,
                               resetAll=reset_all, deleteImg=delete_image, quit=quit,
-                              lineColor=color1, create=create, delete=delete, edit=edit, copy=copy,
-                              createMode=create_mode, editMode=edit_mode, advancedMode=advanced_mode,
-                              shapeLineColor=shape_line_color, shapeFillColor=shape_fill_color,
+                              lineColor=color1, create=create, createPose=create_pose,
+                              createPolygon=create_polygon, createEllipse=create_ellipse,
+                              createCircle=create_circle,
+                              delete=delete, edit=edit, copy=copy,
+                              undo=undo,
+                              createMode=create_mode, createPoseMode=create_pose_mode,
+                              createPolygonMode=create_polygon_mode,
+                              createEllipseMode=create_ellipse_mode,
+                              createCircleMode=create_circle_mode,
+                              editMode=edit_mode, advancedMode=advanced_mode,
+                              shapeStyle=shape_style,
                               zoom=zoom, zoomIn=zoom_in, zoomOut=zoom_out, zoomOrg=zoom_org,
                               fitWindow=fit_window, fitWidth=fit_width,
                               zoomActions=zoom_actions,
                               lightBrighten=light_brighten, lightDarken=light_darken, lightOrg=light_org,
                               lightActions=light_actions,
                               fileMenuActions=(
-                                  open, open_dir, save, reset_all, quit),
+                                  new_project, open_project, save, delete_image, quit),
                               beginner=(), advanced=(),
-                              editMenu=(verify, verify_all, filter_unverified, None,  # Verification functions
-                                        set_verified, set_unverified, None,  # Batch set verification status
-                                        edit, copy, delete,
-                                        None, color1, self.draw_squares_option),
-                              beginnerContext=(create, edit, copy, delete),
-                              advancedContext=(create_mode, edit_mode, edit, copy,
-                                               delete, shape_line_color, shape_fill_color),
+                              # setVerified/setUnverified live on completed-list context menu
+                              editMenu=(verify, verify_all, filter_unverified, None,
+                                        undo, edit, copy, delete),
+                              beginnerContext=(create, create_pose, create_polygon,
+                                               create_ellipse, create_circle, edit, copy, delete),
+                              advancedContext=(create_mode, create_pose_mode, create_polygon_mode,
+                                               create_ellipse_mode, create_circle_mode,
+                                               edit_mode, edit, copy, delete, shape_style),
                               onLoadActive=(
-                                  create, create_mode, edit_mode),
+                                  create, create_pose, create_polygon, create_ellipse, create_circle,
+                                  create_mode, create_pose_mode, create_polygon_mode,
+                                  create_ellipse_mode, create_circle_mode, edit_mode),
                               onShapesPresent=(toggle_labels,),
                               # Add missing actions for language switching
                               openDir=open_dir, changeSaveDir=change_save_dir,
@@ -647,9 +718,9 @@ class MainWindow(QMainWindow, WindowMixin):
             output=self.menu(self.get_str('menu_output')),
             language=self.menu(self.get_str('menu_lang')),
             help=self.menu(self.get_str('menu_help')),
-            recentFiles=QMenu(self.get_str('menu_openRecent')),
-            recentProjects=QMenu(self.get_str('menu_recentProjects')),  # Recent projects menu
-            labelList=label_menu)
+            recentProjects=QMenu(self.get_str('menu_recentProjects')),
+            labelList=label_menu,
+            completedList=completed_menu)
 
         # Auto saving : Enable auto saving if pressing next
         self.auto_saving = QAction(self.get_str('autoSaveMode'), self)
@@ -722,10 +793,10 @@ class MainWindow(QMainWindow, WindowMixin):
 
         add_actions(self.menus.file,
                     (new_project, open_project, edit_project, save_project, close_project, None,
-                     self.menus.recentProjects, None,  # Add recent projects menu
-                     save, reset_all, delete_image, quit))
+                     self.menus.recentProjects, None,
+                     save, delete_image, quit))
         
-        # Data menu: import and export annotations
+        # Data menu: import/export + annotation workflow options
         add_actions(self.menus.output,
                     (import_annotations, export_annotations, None,
                      self.auto_saving, self.single_class_mode))
@@ -748,36 +819,37 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.toolbarToggle = toolbar_toggle
         
         add_actions(self.menus.language, (self.lang_en, self.lang_zh_cn, self.lang_zh_tw, self.lang_ja, self.lang_de, self.lang_fr))
-        add_actions(self.menus.help, (help_default, show_info, self.show_shortcut))
+        add_actions(self.menus.help, (help_default, self.show_shortcut, None, show_info))
         add_actions(self.menus.view, (
-            toolbar_toggle, labels, None,  # Toolbar and dock toggle
-            self.auto_saving,
-            self.single_class_mode,
-            self.display_label_option,
-            advanced_mode, None,
+            toolbar_toggle, labels, None,
+            self.display_label_option, None,
             toggle_labels, None,
             zoom_in, zoom_out, zoom_org, None,
             fit_window, fit_width, None,
             light))
-        
 
-        self.menus.file.aboutToShow.connect(self.update_file_menu)
         self.menus.recentProjects.aboutToShow.connect(self.update_recent_projects_menu)
         
+        # Left toolbar: keep essentials. "Edit mode" removed — after drawing,
+        # we auto-return to edit so boxes can be dragged without an extra button.
+        # Label edit stays available via double-click / Edit menu (Ctrl+E).
         self.actions.beginner = (
-            verify, save, None, create,
-            edit, copy, delete, None,
+            verify, save, None,
+            create, create_pose, create_polygon, create_ellipse, create_circle, None,
+            undo, copy, delete, None,
+            shape_style, None,
             fit_window, fit_width)
 
         self.actions.advanced = (
             verify, save, None,
-            create_mode, edit_mode, None,
-            edit, copy, delete, None,
-            shape_line_color, shape_fill_color, None,
+            create_mode, create_pose_mode, create_polygon_mode,
+            create_ellipse_mode, create_circle_mode, None,
+            undo, copy, delete, None,
+            shape_style, None,
             toggle_labels, None,
             fit_window, fit_width)
 
-        self.statusBar().showMessage('%s started.' % __appname__)
+        self.statusBar().showMessage(self.get_str('appStarted').format(__appname__))
         self.statusBar().show()
 
         # Application state.
@@ -792,6 +864,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.fit_window = False
         # Add Chris
         self.difficult = False
+        self.annotation_undo = AnnotationUndoStack(max_steps=40)
+        self._annotation_undo_armed = True  # coalesce per drag gesture
+        # What the next drawn box should become: 'rectangle' | 'pose'
+        self.create_intent = 'rectangle'
 
         # Fix the compatible issue for qt4 and qt5. Convert the QStringList to python list
         if settings.get(SETTING_RECENT_FILES):
@@ -815,11 +891,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.move(position)
         save_dir = ustr(settings.get(SETTING_SAVE_DIR, None))
         self.last_open_dir = ustr(settings.get(SETTING_LAST_OPEN_DIR, None))
+        # Legacy fallback only — do not advertise this in the status bar.
+        # Real save location is the opened project's annotation_dir.
         if self.default_save_dir is None and save_dir is not None and os.path.exists(save_dir):
             self.default_save_dir = save_dir
-            self.statusBar().showMessage('%s started. Annotation will be saved to %s' %
-                                         (__appname__, self.default_save_dir))
-            self.statusBar().show()
 
         self.restoreState(settings.get(SETTING_WIN_STATE, QByteArray()))
         Shape.line_color = self.line_color = QColor(settings.get(SETTING_LINE_COLOR, DEFAULT_LINE_COLOR))
@@ -834,9 +909,6 @@ class MainWindow(QMainWindow, WindowMixin):
         if xbool(settings.get(SETTING_ADVANCE_MODE, False)):
             self.actions.advancedMode.setChecked(True)
             self.toggle_advanced_mode()
-
-        # Populate the File menu dynamically.
-        self.update_file_menu()
 
         # Since loading the file may take some time, make sure it runs in the background.
         if self.file_path and os.path.isdir(self.file_path):
@@ -926,11 +998,14 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Update right panel group boxes
         if hasattr(self, 'output_group'):
-            self.output_group.setTitle(self.get_str('outputSettings'))
+            self.output_group.setTitle(self.get_str('projectInfoGroup'))
         if hasattr(self, 'output_path_label'):
-            self.output_path_label.setText(self.get_str('outputPath'))
+            self.output_path_label.setText(self.get_str('projectDirLabel'))
+        if hasattr(self, 'open_project_dir_btn'):
+            self.open_project_dir_btn.setToolTip(self.get_str('openProjectDirTip'))
         if hasattr(self, 'output_format_title_label'):
             self.output_format_title_label.setText(self.get_str('outputFormat'))
+        self._refresh_output_path_display()
         
         # Update default label checkbox text
         if hasattr(self, 'use_default_label_checkbox'):
@@ -955,6 +1030,17 @@ class MainWindow(QMainWindow, WindowMixin):
             self.add_folder_btn.setText(self.get_str('addFolder'))
         if hasattr(self, 'clear_pending_btn'):
             self.clear_pending_btn.setText(self.get_str('clearPending'))
+
+        # Also refresh action texts that change_language covers (signal may fire alone)
+        if hasattr(self.actions, 'setVerified'):
+            self.actions.setVerified.setText(self.get_str('setVerified'))
+            self.actions.setVerified.setToolTip(self.get_str('setVerifiedDetail'))
+        if hasattr(self.actions, 'setUnverified'):
+            self.actions.setUnverified.setText(self.get_str('setUnverified'))
+            self.actions.setUnverified.setToolTip(self.get_str('setUnverifiedDetail'))
+        if hasattr(self.actions, 'showInfo'):
+            self.actions.showInfo.setText(self.get_str('info'))
+            self.actions.showInfo.setToolTip(self.get_str('info'))
         
         # Note: ZoomWidget and LightWidget titles are not dynamically updated
         # They would need custom update_title() methods to be added
@@ -964,6 +1050,57 @@ class MainWindow(QMainWindow, WindowMixin):
         self.update()
         
         print(f"✓ UI retranslated for language: {self.i18n.current_language}")
+
+    def _shorten_display_path(self, path, max_chars=28):
+        """Short display path for the narrow side panel; full path goes in tooltip."""
+        if not path:
+            return ''
+        display = path
+        home = os.path.expanduser('~')
+        if home and display.startswith(home):
+            display = '~' + display[len(home):]
+        if len(display) <= max_chars:
+            return display
+        # Prefer keeping the last two path segments when possible
+        parts = display.replace('\\', '/').split('/')
+        parts = [p for p in parts if p]
+        if len(parts) >= 2:
+            tail = parts[-2] + '/' + parts[-1]
+            if len(tail) + 3 <= max_chars:
+                return '…/' + tail
+            if len(parts[-1]) + 3 <= max_chars:
+                return '…/' + parts[-1]
+        return '…' + display[-(max_chars - 1):]
+
+    def _refresh_output_path_display(self):
+        """Show project save location (project_dir); never fall back to legacy save dir."""
+        if not hasattr(self, 'output_dir_label'):
+            return
+        path = None
+        if self.current_project:
+            path = (
+                getattr(self.current_project, 'project_dir', None)
+                or (os.path.dirname(self.current_project.project_file)
+                    if getattr(self.current_project, 'project_file', None) else None)
+            )
+        self._project_location_path = path if path else None
+        if path:
+            self.output_dir_label.setText(self._shorten_display_path(path))
+            self.output_dir_label.setToolTip(path)
+        else:
+            self.output_dir_label.setText(self.get_str('notSet'))
+            self.output_dir_label.setToolTip('')
+        if hasattr(self, 'open_project_dir_btn'):
+            self.open_project_dir_btn.setEnabled(bool(path and os.path.isdir(path)))
+
+    def open_project_dir_in_explorer(self):
+        """Open the project folder in the system file manager (read-only reveal)."""
+        path = getattr(self, '_project_location_path', None)
+        if not path or not os.path.isdir(path):
+            if hasattr(self, 'statusBar') and self.statusBar():
+                self.statusBar().showMessage(self.get_str('notSet'), 3000)
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path)))
     
     def retranslate_menus(self):
         """Retranslate all menu titles and actions when language changes."""
@@ -977,7 +1114,7 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.menus, 'help'):
             self.menus.help.setTitle(self.get_str('menu.help'))
         if hasattr(self.menus, 'language'):
-            self.menus.language.setTitle(self.get_str('Language / 语言'))
+            self.menus.language.setTitle(self.get_str('menu_lang'))
         
         # Update toolbar toggle action
         if hasattr(self, 'tools'):
@@ -1039,11 +1176,12 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'advancedMode'):
             self.actions.advancedMode.setChecked(value)
         if value:
-            self.actions.createMode.setEnabled(True)
             self.actions.editMode.setEnabled(False)
+            self.sync_create_actions_enabled(allow_start_draw=True)
             self.dock.setFeatures(self.dock.features() | self.dock_features)
         else:
             self.dock.setFeatures(self.dock.features() ^ self.dock_features)
+            self.sync_create_actions_enabled(allow_start_draw=True)
 
     def populate_mode_actions(self):
         
@@ -1054,111 +1192,172 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Clear toolbar and create a unified container
         self.tools.clear()
+        self.tools.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.tools.setIconSize(QSize(22, 22))
         
         # Create a unified container for all toolbar content
         unified_container = QWidget()
         unified_layout = QVBoxLayout()
-        unified_layout.setContentsMargins(2, 2, 2, 2)
-        unified_layout.setSpacing(3)
-        # Keep toolbar buttons at the top; macOS vertical toolbars stretch to window height
-        unified_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        unified_layout.setContentsMargins(3, 4, 3, 4)
+        unified_layout.setSpacing(4)
+        unified_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        
+        # 2-column grid for tool buttons
+        grid_host = QWidget()
+        grid = QGridLayout(grid_host)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(2)
+        grid.setVerticalSpacing(2)
+        grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         
         # Check if project is loaded and image is available
         has_project = self.current_project is not None
         has_image = self.file_path is not None and os.path.exists(self.file_path)
         
-        # Add buttons in vertical layout (each button takes full width)
+        row, col = 0, 0
+        cols = 2
+
+        def _add_grid_separator():
+            nonlocal row, col
+            if col != 0:
+                row += 1
+                col = 0
+            line = QFrame()
+            line.setFrameShape(QFrame.Shape.HLine)
+            line.setFrameShadow(QFrame.Shadow.Sunken)
+            grid.addWidget(line, row, 0, 1, cols)
+            row += 1
+            col = 0
+        
+        # Icon-only buttons in 2 columns; hover tooltip shows name / shortcut
         for action_item in tool:
             if action_item is None:
-                # Add separator line
-                line = QFrame()
-                line.setFrameShape(QFrame.Shape.HLine)
-                line.setFrameShadow(QFrame.Shadow.Sunken)
-                unified_layout.addWidget(line)
+                _add_grid_separator()
             elif hasattr(action_item, 'icon'):
-                # It's a QAction, create a tool button that stretches to full width
                 btn = QToolButton()
                 btn.setDefaultAction(action_item)
-                btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-                # Make button stretch to full width
-                btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+                btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+                btn.setAutoRaise(True)
+                btn.setIconSize(QSize(22, 22))
+                btn.setFixedSize(34, 34)
+                tip = action_item.toolTip() or action_item.text()
+                shortcut = action_item.shortcut().toString() if action_item.shortcut() else ''
+                if shortcut and shortcut not in tip:
+                    tip = f'{tip}  ({shortcut})'
+                btn.setToolTip(tip)
+                action_item.setToolTip(tip)
                 
-                # Disable buttons if no project or no image loaded
-                # But always enable verify, next, prev buttons if project is loaded
                 if not has_project:
-                    # No project loaded - disable all annotation buttons
-                    if action_item in [self.actions.create, self.actions.edit, self.actions.delete, 
-                                      self.actions.copy, self.actions.createMode, self.actions.editMode]:
+                    if action_item in [self.actions.create, self.actions.createPose,
+                                      self.actions.createPolygon, self.actions.createEllipse,
+                                      self.actions.createCircle,
+                                      self.actions.edit, self.actions.delete,
+                                      self.actions.copy, self.actions.createMode,
+                                      self.actions.createPoseMode,
+                                      self.actions.createPolygonMode,
+                                      self.actions.createEllipseMode,
+                                      self.actions.createCircleMode,
+                                      self.actions.editMode]:
                         action_item.setEnabled(False)
                 elif not has_image:
-                    # Project loaded but no image - disable annotation buttons
-                    if action_item in [self.actions.create, self.actions.edit, self.actions.delete,
-                                      self.actions.copy, self.actions.createMode, self.actions.editMode]:
+                    if action_item in [self.actions.create, self.actions.createPose,
+                                      self.actions.createPolygon, self.actions.createEllipse,
+                                      self.actions.createCircle,
+                                      self.actions.edit, self.actions.delete,
+                                      self.actions.copy, self.actions.createMode,
+                                      self.actions.createPoseMode,
+                                      self.actions.createPolygonMode,
+                                      self.actions.createEllipseMode,
+                                      self.actions.createCircleMode,
+                                      self.actions.editMode]:
+                        action_item.setEnabled(False)
+                elif action_item in (getattr(self.actions, 'createPose', None),
+                                    getattr(self.actions, 'createPoseMode', None)):
+                    # Pose buttons only for pose-task projects
+                    if not (self.current_project and self.current_project.is_pose_task()):
                         action_item.setEnabled(False)
                 
-                unified_layout.addWidget(btn)
+                grid.addWidget(btn, row, col, Qt.AlignmentFlag.AlignCenter)
+                col += 1
+                if col >= cols:
+                    col = 0
+                    row += 1
+
+        unified_layout.addWidget(grid_host, 0, Qt.AlignmentFlag.AlignHCenter)
         
-        # Add separator before sliders
+        # Separator before sliders
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
         unified_layout.addWidget(line)
         
-        # Add brightness slider with label
-        brightness_label = QLabel(self.get_str('lightWidgetTitle') + ':')
-        brightness_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        unified_layout.addWidget(brightness_label)
+        # Brightness + zoom side by side (2 columns)
+        sliders_row = QWidget()
+        sliders_layout = QHBoxLayout(sliders_row)
+        sliders_layout.setContentsMargins(0, 0, 0, 0)
+        sliders_layout.setSpacing(4)
+        sliders_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         
-        light_widget_container = self.light_widget.create_widget_with_label()
-        unified_layout.addWidget(light_widget_container)
+        light_widget_container = self.light_widget.create_compact_vertical_widget()
+        light_widget_container.setToolTip(self.get_str('lightWidgetTitle'))
+        sliders_layout.addWidget(light_widget_container)
         
-        # Add zoom slider with label
-        zoom_label = QLabel(self.get_str('zoomin') + ':')
-        zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        unified_layout.addWidget(zoom_label)
+        zoom_widget_container = self.zoom_widget.create_compact_vertical_widget()
+        zoom_widget_container.setToolTip(self.get_str('zoomin'))
+        sliders_layout.addWidget(zoom_widget_container)
         
-        zoom_widget_container = self.zoom_widget.create_widget_with_label()
-        unified_layout.addWidget(zoom_widget_container)
+        unified_layout.addWidget(sliders_row, 0, Qt.AlignmentFlag.AlignHCenter)
         
         unified_container.setLayout(unified_layout)
         unified_container.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
+        rail_w = 34 * cols + 2 * (cols - 1) + 10  # buttons + gaps + margins
+        unified_container.setFixedWidth(rail_w)
         
         # Add the unified container to toolbar
         self.tools.addWidget(unified_container)
+        self.tools.setFixedWidth(rail_w + 6)
         if self.os_name == 'Darwin':
             self.tools.setSizePolicy(
-                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Maximum)
         
         self.canvas.menus[0].clear()
         add_actions(self.canvas.menus[0], menu)
         self.menus.edit.clear()
-        actions = (self.actions.create,) if self.beginner() \
-            else (self.actions.createMode, self.actions.editMode)
+        if self.beginner():
+            actions = (self.actions.create, self.actions.createPose,
+                       self.actions.createPolygon, self.actions.createEllipse,
+                       self.actions.createCircle)
+        else:
+            actions = (self.actions.createMode, self.actions.createPoseMode,
+                       self.actions.createPolygonMode, self.actions.createEllipseMode,
+                       self.actions.createCircleMode, self.actions.editMode)
         add_actions(self.menus.edit, actions + self.actions.editMenu)
+        self.sync_create_actions_enabled(allow_start_draw=True)
         
-        # Optimize toolbar layout: compact spacing and ensure buttons are always visible
-        self.tools.setIconSize(QSize(16, 16))  # Smaller icons
-        self.tools.setStyleSheet("""
-            QToolBar {
-                spacing: 2px;
+        # Compact 2-column icon rail
+        self.tools.setStyleSheet(f"""
+            QToolBar {{
+                spacing: 1px;
                 padding: 2px;
-            }
-            QToolButton {
-                min-height: 24px;
-                max-height: 28px;
-                padding: 2px 4px;
-                margin: 1px 0px;
-                font-size: 13px;
-            }
-            /* Allow slider widgets to display properly */
-            QWidget {
-                min-height: 20px;
-            }
-            QSlider {
-                min-width: 80px;
-                max-width: 120px;
-            }
+                max-width: {rail_w + 6}px;
+            }}
+            QToolButton {{
+                min-width: 32px;
+                max-width: 34px;
+                min-height: 32px;
+                max-height: 34px;
+                padding: 4px;
+                margin: 0px;
+                border-radius: 4px;
+            }}
+            QToolButton:hover {{
+                background-color: palette(midlight);
+            }}
+            QSlider {{
+                min-width: 20px;
+                max-width: 24px;
+            }}
         """)
 
     def set_beginner(self):
@@ -1176,7 +1375,36 @@ class MainWindow(QMainWindow, WindowMixin):
     def set_clean(self):
         self.dirty = False
         self.actions.save.setEnabled(False)
-        self.actions.create.setEnabled(True)
+        self.sync_create_actions_enabled(allow_start_draw=True)
+
+    def can_pose_annotate(self):
+        return bool(self.current_project and self.current_project.is_pose_task())
+
+    def sync_create_actions_enabled(self, allow_start_draw=True):
+        """Enable rectangle/pose/polygon create buttons according to project + image state."""
+        has_image = bool(getattr(self, 'file_path', None) and os.path.exists(self.file_path))
+        can_draw = bool(allow_start_draw and has_image)
+        pose_ok = bool(can_draw and self.can_pose_annotate())
+        if hasattr(self.actions, 'create'):
+            self.actions.create.setEnabled(can_draw)
+        if hasattr(self.actions, 'createMode'):
+            self.actions.createMode.setEnabled(can_draw)
+        if hasattr(self.actions, 'createPolygon'):
+            self.actions.createPolygon.setEnabled(can_draw)
+        if hasattr(self.actions, 'createPolygonMode'):
+            self.actions.createPolygonMode.setEnabled(can_draw)
+        if hasattr(self.actions, 'createEllipse'):
+            self.actions.createEllipse.setEnabled(can_draw)
+        if hasattr(self.actions, 'createEllipseMode'):
+            self.actions.createEllipseMode.setEnabled(can_draw)
+        if hasattr(self.actions, 'createCircle'):
+            self.actions.createCircle.setEnabled(can_draw)
+        if hasattr(self.actions, 'createCircleMode'):
+            self.actions.createCircleMode.setEnabled(can_draw)
+        if hasattr(self.actions, 'createPose'):
+            self.actions.createPose.setEnabled(pose_ok)
+        if hasattr(self.actions, 'createPoseMode'):
+            self.actions.createPoseMode.setEnabled(pose_ok)
 
     def toggle_actions(self, value=True):
         """Enable/Disable widgets which depend on an opened image."""
@@ -1186,9 +1414,8 @@ class MainWindow(QMainWindow, WindowMixin):
             z.setEnabled(value)
         for action in self.actions.onLoadActive:
             action.setEnabled(value)
-        # Enable/disable create button based on whether image is loaded
-        self.actions.create.setEnabled(value)
-        self.actions.createMode.setEnabled(value)
+        # Create / pose buttons depend on image + project task type
+        self.sync_create_actions_enabled(allow_start_draw=value)
 
     def create_output_settings_widget(self):
         """Create the output settings dock widget with path input and format selection"""
@@ -1326,243 +1553,205 @@ class MainWindow(QMainWindow, WindowMixin):
         elif browser.lower() in wb._browsers:
             wb.get(browser.lower()).open(link, new=2)
 
-    def show_default_tutorial_dialog(self):
-        """Show a simple tutorial dialog with basic instructions (multilingual)"""
+    def _open_help_markdown_dialog(self, title, markdown, *, min_size=(760, 580), header=None):
+        """Shared help dialog shell: optional header + Markdown body + Close."""
         dialog = QDialog(self)
-        dialog.setWindowTitle(self.get_str('tutorialDefault'))
-        dialog.setMinimumSize(700, 600)
-        
-        # Main layout
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(15)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Tutorial content from i18n
-        tutorial_label = QLabel(self.get_str('tutorialContent'))
-        tutorial_label.setWordWrap(True)
-        tutorial_label.setTextFormat(Qt.RichText)
-        tutorial_label.setOpenExternalLinks(True)
-        tutorial_label.setStyleSheet('font-size: 13px; line-height: 1.6;')
-        main_layout.addWidget(tutorial_label)
-        
-        main_layout.addStretch()
-        
-        # Close button
-        button_box = QDialogButtonBox(QDialogButtonBox.Close)
-        button_box.rejected.connect(dialog.reject)
-        main_layout.addWidget(button_box)
-        
-        dialog.setLayout(main_layout)
+        dialog.setWindowTitle(title)
+        dialog.setMinimumSize(*min_size)
+        dialog.resize(min_size[0] + 20, min_size[1] + 40)
+
+        root = QVBoxLayout(dialog)
+        root.setContentsMargins(18, 16, 18, 14)
+        root.setSpacing(12)
+
+        if header is not None:
+            root.addLayout(header)
+
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(True)
+        browser.setFrameShape(QFrame.Shape.NoFrame)
+        browser.setStyleSheet(
+            'QTextBrowser {'
+            '  background: transparent;'
+            '  padding: 4px 2px;'
+            '  font-size: 13px;'
+            '}'
+        )
+        # Soft document styling after Markdown→HTML conversion
+        # Qt CSS does not accept 4-digit hex (#8884); use rgba instead.
+        browser.document().setDefaultStyleSheet(
+            'h1 { font-size: 20px; font-weight: 700; margin: 0 0 12px 0; }'
+            'h2 { font-size: 15px; font-weight: 700; margin: 18px 0 8px 0; }'
+            'h3 { font-size: 13px; font-weight: 700; margin: 14px 0 6px 0; }'
+            'p, li { line-height: 1.55; }'
+            'ul, ol { margin-left: 4px; }'
+            'code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;'
+            '       font-size: 12px; }'
+            'table { border-collapse: collapse; width: 100%; margin: 6px 0 12px 0; }'
+            'th { text-align: left; padding: 7px 10px;'
+            '     border-bottom: 2px solid rgba(136, 136, 136, 0.45); }'
+            'td { padding: 6px 10px;'
+            '     border-bottom: 1px solid rgba(136, 136, 136, 0.28); }'
+            'tr:nth-child(even) td { background-color: rgba(136, 136, 136, 0.08); }'
+            'a { text-decoration: none; }'
+            'hr { border: none;'
+            '     border-top: 1px solid rgba(136, 136, 136, 0.45);'
+            '     margin: 14px 0; }'
+        )
+        browser.setMarkdown(markdown)
+        root.addWidget(browser, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        close_btn = buttons.button(QDialogButtonBox.StandardButton.Close)
+        if close_btn is not None:
+            close_btn.setText(self.get_str('helpDialogClose'))
+        root.addWidget(buttons)
         dialog.exec()
 
+    def show_default_tutorial_dialog(self):
+        """Show getting-started guide (Markdown, multilingual)."""
+        md = self.get_str('tutorialContentMd')
+        if not md or md.startswith('[MISSING'):
+            # Fallback to legacy HTML blob if MD key absent
+            dialog = QDialog(self)
+            dialog.setWindowTitle(self.get_str('tutorialDefault'))
+            dialog.setMinimumSize(700, 600)
+            layout = QVBoxLayout(dialog)
+            label = QLabel(self.get_str('tutorialContent'))
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.RichText)
+            label.setOpenExternalLinks(True)
+            layout.addWidget(label)
+            box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            box.rejected.connect(dialog.reject)
+            layout.addWidget(box)
+            dialog.exec()
+            return
+        self._open_help_markdown_dialog(
+            self.get_str('tutorialDefault'), md, min_size=(760, 600))
+
     def show_info_dialog(self):
-        """Show information about the application"""
+        """About dialog with logo header + Markdown body."""
         from libs.__init__ import __version__
-        
-        # Create a rich text dialog with project information
-        dialog = QDialog(self)
-        dialog.setWindowTitle(self.get_str('aboutTitle'))
-        dialog.setMinimumSize(600, 500)
-        
-        # Main layout
-        main_layout = QVBoxLayout()
-        
-        # Title and logo section
-        title_layout = QHBoxLayout()
-        
-        # Try to load icon
+
+        header = QHBoxLayout()
+        header.setSpacing(14)
         icon_label = QLabel()
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'icons', 'app.png')
+        icon_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'resources', 'icons', 'app.png')
         if os.path.exists(icon_path):
             pixmap = QPixmap(icon_path)
             if not pixmap.isNull():
-                icon_label.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                icon_label.setPixmap(
+                    pixmap.scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatio,
+                                  Qt.TransformationMode.SmoothTransformation))
+        if icon_label.pixmap() is None or icon_label.pixmap().isNull():
+            icon_label.setText('LC')
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_label.setFixedSize(56, 56)
+            icon_label.setStyleSheet(
+                'font-size: 18px; font-weight: 700;'
+                'border: 1px solid palette(mid); border-radius: 12px;')
+        header.addWidget(icon_label)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        name = QLabel('LabelCraft')
+        name.setStyleSheet('font-size: 22px; font-weight: 700;')
+        ver = QLabel(f'{self.get_str("aboutVersion")} {__version__}')
+        ver.setStyleSheet('color: palette(mid); font-size: 13px;')
+        title_col.addWidget(name)
+        title_col.addWidget(ver)
+        header.addLayout(title_col)
+        header.addStretch()
+
+        py_ver = f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}'
+        md = self.get_str('aboutContentMd')
+        if md.startswith('[MISSING'):
+            md = self.get_str('aboutDescription')
         else:
-            icon_label.setText('📦')
-            icon_label.setStyleSheet('font-size: 48px;')
-        title_layout.addWidget(icon_label)
-        title_layout.addSpacing(20)
-        
-        # Title text
-        title_text = QVBoxLayout()
-        app_name_label = QLabel('LabelCraft')
-        app_name_label.setStyleSheet('font-size: 24px; font-weight: bold;')
-        version_label = QLabel(f'{self.get_str("aboutVersion")} {__version__}')
-        title_text.addWidget(app_name_label)
-        title_text.addWidget(version_label)
-        title_layout.addLayout(title_text)
-        title_layout.addStretch()
-        
-        main_layout.addLayout(title_layout)
-        main_layout.addSpacing(20)
-        
-        # Description
-        desc_label = QLabel(self.get_str('aboutDescription'))
-        desc_label.setWordWrap(True)
-        main_layout.addWidget(desc_label)
-        main_layout.addSpacing(15)
-        
-        # Features section
-        features_title = QLabel(self.get_str('aboutFeatures'))
-        features_title.setStyleSheet('font-weight: bold;')
-        main_layout.addWidget(features_title)
-        
-        features_text = QLabel(
-            f'{self.get_str("aboutFeatureMultiFormat")}<br>'
-            f'{self.get_str("aboutFeatureSmartAnnotation")}<br>'
-            f'{self.get_str("aboutFeatureProjectManagement")}<br>'
-            f'{self.get_str("aboutFeatureWorkflow")}<br>'
-            f'{self.get_str("aboutFeatureImageAdjustment")}<br>'
-            f'{self.get_str("aboutFeatureMultilingual")}'
-        )
-        features_text.setWordWrap(True)
-        main_layout.addWidget(features_text)
-        main_layout.addSpacing(15)
-        
-        # Technical info
-        tech_title = QLabel(self.get_str('aboutTechInfo'))
-        tech_title.setStyleSheet('font-weight: bold;')
-        main_layout.addWidget(tech_title)
-        
-        tech_info = QLabel(
-            f'{self.get_str("aboutPythonVersion")}: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}<br>'
-            f'{self.get_str("aboutGUIFramework")}<br>'
-            f'{self.get_str("aboutDevLanguage")}<br>'
-            f'{self.get_str("aboutLicense")}'
-        )
-        tech_info.setWordWrap(True)
-        main_layout.addWidget(tech_info)
-        main_layout.addSpacing(15)
-        
-        # Links section
-        links_title = QLabel(self.get_str('aboutLinks'))
-        links_title.setStyleSheet('font-weight: bold;')
-        main_layout.addWidget(links_title)
-        
-        links_text = QLabel(
-            f'• <a href="https://github.com/syd168/LabelCraft">{self.get_str("aboutGitHubHome")}</a><br>'
-            f'• <a href="https://github.com/syd168/LabelCraft/issues">{self.get_str("aboutIssueTracker")}</a><br>'
-            f'• <a href="https://github.com/syd168/LabelCraft/blob/master/README.md">{self.get_str("aboutDocumentation")}</a>'
-        )
-        links_text.setWordWrap(True)
-        links_text.setOpenExternalLinks(True)
-        main_layout.addWidget(links_text)
-        
-        main_layout.addStretch()
-        
-        # Close button
-        button_box = QDialogButtonBox(QDialogButtonBox.Close)
-        button_box.rejected.connect(dialog.reject)
-        main_layout.addWidget(button_box)
-        
-        dialog.setLayout(main_layout)
-        dialog.exec()
+            md = (md.replace('{version}', __version__)
+                    .replace('{python_version}', py_ver))
+
+        self._open_help_markdown_dialog(
+            self.get_str('aboutTitle'), md, min_size=(720, 560), header=header)
+
+    def _build_shortcuts_markdown(self):
+        """Build shortcuts cheat-sheet as Markdown tables."""
+        def table(rows):
+            lines = ['| {0} | {1} |'.format(
+                self.get_str('shortcutColAction'), self.get_str('shortcutColKey')),
+                     '| --- | --- |']
+            for action, key in rows:
+                lines.append(f'| {action} | `{key}` |')
+            return '\n'.join(lines)
+
+        sections = [
+            (self.get_str('shortcutFileOps'), [
+                (self.get_str('newProject'), 'Ctrl+N'),
+                (self.get_str('openProject'), 'Ctrl+O'),
+                (self.get_str('editProject'), 'Ctrl+Alt+E'),
+                (self.get_str('saveProject'), 'Ctrl+Alt+S'),
+                (self.get_str('save'), 'Ctrl+S'),
+                (self.get_str('importAnnotations'), 'Ctrl+I'),
+                (self.get_str('exportAnnotations'), 'Ctrl+Shift+E'),
+                (self.get_str('nextImg'), 'D'),
+                (self.get_str('prevImg'), 'A'),
+            ]),
+            (self.get_str('shortcutEditOps'), [
+                (self.get_str('crtRect'), 'W'),
+                (self.get_str('crtPose'), 'P'),
+                (self.get_str('crtPoly'), 'G'),
+                (self.get_str('crtEllipse'), 'E'),
+                (self.get_str('crtCircle'), 'C'),
+                (self.get_str('crtCircleFromCenter'), 'Shift'),
+                (self.get_str('delBox'), 'Delete'),
+                (self.get_str('dupBox'), 'Ctrl+D'),
+                (self.get_str('editLabel'), 'Ctrl+E'),
+                (self.get_str('undo'), 'Ctrl+Z'),
+                (self.get_str('copyPrevBounding'), 'Ctrl+V'),
+            ]),
+            (self.get_str('shortcutViewOps'), [
+                (self.get_str('zoomin'), 'Ctrl++'),
+                (self.get_str('zoomout'), 'Ctrl+-'),
+                (self.get_str('originalsize'), 'Ctrl+='),
+                (self.get_str('fitWin'), 'Ctrl+F'),
+                (self.get_str('fitWidth'), 'Ctrl+Shift+F'),
+            ]),
+            (self.get_str('shortcutBrightness'), [
+                (self.get_str('lightbrighten'), 'Ctrl+Shift++'),
+                (self.get_str('lightdarken'), 'Ctrl+Shift+-'),
+                (self.get_str('lightreset'), 'Ctrl+Shift+='),
+            ]),
+            (self.get_str('shortcutOther'), [
+                (self.get_str('verifyImg'), 'V'),
+                (self.get_str('keypointVisibility'), 'H'),
+                (self.get_str('showAllBox'), 'Ctrl+H'),
+                (self.get_str('singleClsMode'), 'Ctrl+Shift+S'),
+                (self.get_str('displayLabel'), 'Ctrl+Shift+P'),
+            ]),
+        ]
+
+        parts = [f"# {self.get_str('shortcutTitle')}", '',
+                 self.get_str('shortcutIntro'), '']
+        for title, rows in sections:
+            # Strip leading emoji section markers look fine in MD headings
+            parts.append(f'## {title}')
+            parts.append('')
+            parts.append(table(rows))
+            parts.append('')
+        tip = self.get_str('shortcutPoseTip')
+        if tip and not tip.startswith('[MISSING'):
+            parts.append(f'> {tip}')
+        return '\n'.join(parts)
 
     def show_shortcuts_dialog(self):
-        """Show a dialog with all keyboard shortcuts"""
-
-        # Define title style (theme-adaptive, no hardcoded colors)
-        title_style = """
-            QLabel {
-                font-size: 14px;
-                font-weight: bold;
-                padding: 5px 0px;
-            }
-        """
-
-        # Create dialog
-        dialog = QDialog(self)
-        dialog.setWindowTitle(self.get_str('shortcutTitle'))
-        dialog.setMinimumSize(700, 600)
-
-        # Create main layout
-        main_layout = QVBoxLayout()
-
-        # Create scroll area for better viewing
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-
-        # Helper function to create shortcut row (using default style)
-        def create_shortcut_row(action_text, key_text):
-            row = QHBoxLayout()
-            action_label = QLabel(action_text)
-            key_label = QLabel(key_text)
-            row.addWidget(action_label)
-            row.addStretch()
-            row.addWidget(key_label)
-            return row
-
-        # Section 1: File Operations
-        section1_title = QLabel(self.get_str('shortcutFileOps'))
-        section1_title.setStyleSheet(title_style)
-        scroll_layout.addWidget(section1_title)
-
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('openFile'), 'Ctrl+O'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('openDir'), 'Ctrl+U'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('save'), 'Ctrl+S'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('nextImg'), 'D'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('prevImg'), 'A'))
-
-        scroll_layout.addSpacing(15)
-
-        # Section 2: Edit Operations
-        section2_title = QLabel(self.get_str('shortcutEditOps'))
-        scroll_layout.addWidget(section2_title)
-
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('crtBox'), 'W'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('delBox'), 'Delete'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('dupBox'), 'Ctrl+D'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('editLabel'), 'Ctrl+E'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('editBox'), 'Ctrl+J'))
-
-        scroll_layout.addSpacing(15)
-
-        # Section 3: View Operations
-        section3_title = QLabel(self.get_str('shortcutViewOps'))
-        scroll_layout.addWidget(section3_title)
-
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('zoomin'), 'Ctrl++'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('zoomout'), 'Ctrl+-'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('originalsize'), 'Ctrl+='))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('fitWin'), 'Ctrl+F'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('fitWidth'), 'Ctrl+Shift+F'))
-
-        scroll_layout.addSpacing(15)
-
-        # Section 4: Brightness
-        section4_title = QLabel(self.get_str('shortcutBrightness'))
-        scroll_layout.addWidget(section4_title)
-
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('lightbrighten'), 'Ctrl+Shift++'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('lightdarken'), 'Ctrl+Shift+-'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('lightreset'), 'Ctrl+Shift+='))
-
-        scroll_layout.addSpacing(15)
-
-        # Section 5: Other
-        section5_title = QLabel(self.get_str('shortcutOther'))
-        scroll_layout.addWidget(section5_title)
-
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('advancedMode'), 'Ctrl+Shift+A'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('verifyImg'), 'V'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('showAllBox'), 'Ctrl+H'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('singleClsMode'), 'Ctrl+Shift+S'))
-        scroll_layout.addLayout(create_shortcut_row(self.get_str('displayLabel'), 'Ctrl+Shift+P'))
-
-        scroll_layout.addStretch()
-
-        scroll_area.setWidget(scroll_content)
-        main_layout.addWidget(scroll_area)
-
-        # Add close button
-        button_box = QDialogButtonBox(QDialogButtonBox.Close)
-        button_box.rejected.connect(dialog.reject)
-        main_layout.addWidget(button_box)
-
-        dialog.setLayout(main_layout)
-        dialog.exec()
+        """Show keyboard shortcuts as a Markdown table document."""
+        self._open_help_markdown_dialog(
+            self.get_str('shortcutTitle'),
+            self._build_shortcuts_markdown(),
+            min_size=(720, 600))
 
     def change_language(self, locale):
         """Change the application language (uses new i18n engine)"""
@@ -1576,7 +1765,6 @@ class MainWindow(QMainWindow, WindowMixin):
         self.menus.output.setTitle(self.get_str('menu_output'))
         self.menus.language.setTitle(self.get_str('menu_lang'))
         self.menus.help.setTitle(self.get_str('menu_help'))
-        self.menus.recentFiles.setTitle(self.get_str('menu_openRecent'))
         self.menus.recentProjects.setTitle(self.get_str('menu_recentProjects'))
 
         # Update dock titles
@@ -1620,28 +1808,23 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.closeProject.setToolTip(self.get_str('closeProjectDetail'))
         
         # Update right panel group boxes and widgets
-        # Find all QGroupBox widgets in the dock and update their titles
-        for widget in self.dock.findChildren(QGroupBox):
-            title = widget.title()
-            if title == '输出设置' or title == 'Output Settings':
-                widget.setTitle(self.get_str('outputSettings'))
-            elif title == '标签过滤' or title == 'Label Filter':
-                widget.setTitle(self.get_str('labelFilter'))
-            elif title == '标签列表' or title == 'Label List':
-                widget.setTitle(self.get_str('labelList'))
-            elif title == '已完成标注' or title == 'Completed Annotations':
-                widget.setTitle(self.get_str('completedAnnotations'))
+        if hasattr(self, 'output_group'):
+            self.output_group.setTitle(self.get_str('projectInfoGroup'))
+        if hasattr(self, 'filter_label_group'):
+            self.filter_label_group.setTitle(self.get_str('labelFilter'))
+        if hasattr(self, 'label_list_group'):
+            self.label_list_group.setTitle(self.get_str('labelList'))
+        if hasattr(self, 'completed_group'):
+            self.completed_group.setTitle(self.get_str('completedAnnotations'))
         
         # Update output path and format labels
-        if hasattr(self, 'output_dir_label'):
-            # Find the label before output_dir_label to update its text
-            parent_widget = self.output_dir_label.parentWidget()
-            if parent_widget:
-                for child in parent_widget.findChildren(QLabel):
-                    if child.text() == '输出路径：' or child.text() == 'Output Path:':
-                        child.setText(self.get_str('outputPath'))
-                    elif child.text() == '输出格式：' or child.text() == 'Output Format:':
-                        child.setText(self.get_str('outputFormat'))
+        if hasattr(self, 'output_path_label'):
+            self.output_path_label.setText(self.get_str('projectDirLabel'))
+        if hasattr(self, 'open_project_dir_btn'):
+            self.open_project_dir_btn.setToolTip(self.get_str('openProjectDirTip'))
+        if hasattr(self, 'output_format_title_label'):
+            self.output_format_title_label.setText(self.get_str('outputFormat'))
+        self._refresh_output_path_display()
         
         # Update zoom and light widget tooltips
         if hasattr(self, 'zoom_widget'):
@@ -1689,8 +1872,20 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.quit.setText(self.get_str('quit'))
             self.actions.quit.setToolTip(self.get_str('quitApp'))
         if hasattr(self.actions, 'create'):
-            self.actions.create.setText(self.get_str('crtBox'))
-            self.actions.create.setToolTip(self.get_str('crtBoxDetail'))
+            self.actions.create.setText(self.get_str('crtRect'))
+            self.actions.create.setToolTip(self.get_str('crtRectDetail'))
+        if hasattr(self.actions, 'createPose'):
+            self.actions.createPose.setText(self.get_str('crtPose'))
+            self.actions.createPose.setToolTip(self.get_str('crtPoseDetail'))
+        if hasattr(self.actions, 'createPolygon'):
+            self.actions.createPolygon.setText(self.get_str('crtPoly'))
+            self.actions.createPolygon.setToolTip(self.get_str('crtPolyDetail'))
+        if hasattr(self.actions, 'createEllipse'):
+            self.actions.createEllipse.setText(self.get_str('crtEllipse'))
+            self.actions.createEllipse.setToolTip(self.get_str('crtEllipseDetail'))
+        if hasattr(self.actions, 'createCircle'):
+            self.actions.createCircle.setText(self.get_str('crtCircle'))
+            self.actions.createCircle.setToolTip(self.get_str('crtCircleDetail'))
         if hasattr(self.actions, 'delete'):
             self.actions.delete.setText(self.get_str('delBox'))
             self.actions.delete.setToolTip(self.get_str('delBoxDetail'))
@@ -1701,17 +1896,29 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.edit.setText(self.get_str('editLabel'))
             self.actions.edit.setToolTip(self.get_str('editLabelDetail'))
         if hasattr(self.actions, 'createMode'):
-            self.actions.createMode.setText(self.get_str('crtBox'))
-            self.actions.createMode.setToolTip(self.get_str('crtBoxDetail'))
+            self.actions.createMode.setText(self.get_str('crtRect'))
+            self.actions.createMode.setToolTip(self.get_str('crtRectDetail'))
+        if hasattr(self.actions, 'createPoseMode'):
+            self.actions.createPoseMode.setText(self.get_str('crtPose'))
+            self.actions.createPoseMode.setToolTip(self.get_str('crtPoseDetail'))
+        if hasattr(self.actions, 'createPolygonMode'):
+            self.actions.createPolygonMode.setText(self.get_str('crtPoly'))
+            self.actions.createPolygonMode.setToolTip(self.get_str('crtPolyDetail'))
+        if hasattr(self.actions, 'createEllipseMode'):
+            self.actions.createEllipseMode.setText(self.get_str('crtEllipse'))
+            self.actions.createEllipseMode.setToolTip(self.get_str('crtEllipseDetail'))
+        if hasattr(self.actions, 'createCircleMode'):
+            self.actions.createCircleMode.setText(self.get_str('crtCircle'))
+            self.actions.createCircleMode.setToolTip(self.get_str('crtCircleDetail'))
         if hasattr(self.actions, 'editMode'):
             self.actions.editMode.setText(self.get_str('editBox'))
             self.actions.editMode.setToolTip(self.get_str('editBoxDetail'))
-        if hasattr(self.actions, 'shapeLineColor'):
-            self.actions.shapeLineColor.setText(self.get_str('shapeLineColor'))
-            self.actions.shapeLineColor.setToolTip(self.get_str('shapeLineColorDetail'))
-        if hasattr(self.actions, 'shapeFillColor'):
-            self.actions.shapeFillColor.setText(self.get_str('shapeFillColor'))
-            self.actions.shapeFillColor.setToolTip(self.get_str('shapeFillColorDetail'))
+        if hasattr(self.actions, 'shapeStyle'):
+            self.actions.shapeStyle.setText(self.get_str('shapeStyle'))
+            self.actions.shapeStyle.setToolTip(self.get_str('shapeStyleDetail'))
+        if hasattr(self.actions, 'undo'):
+            self.actions.undo.setText(self.get_str('undoAnnotation'))
+            self.actions.undo.setToolTip(self.get_str('undoAnnotationDetail'))
         if hasattr(self.actions, 'lineColor'):
             self.actions.lineColor.setText(self.get_str('boxLineColor'))
             self.actions.lineColor.setToolTip(self.get_str('boxLineColorDetail'))
@@ -1783,6 +1990,14 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'verifyAll'):
             self.actions.verifyAll.setText(self.get_str('verifyAll'))
             self.actions.verifyAll.setToolTip(self.get_str('verifyAllDetail'))
+
+        # Update set verified / unverified actions
+        if hasattr(self.actions, 'setVerified'):
+            self.actions.setVerified.setText(self.get_str('setVerified'))
+            self.actions.setVerified.setToolTip(self.get_str('setVerifiedDetail'))
+        if hasattr(self.actions, 'setUnverified'):
+            self.actions.setUnverified.setText(self.get_str('setUnverified'))
+            self.actions.setUnverified.setToolTip(self.get_str('setUnverifiedDetail'))
         
         # Update filter unverified action
         if hasattr(self.actions, 'filterUnverified'):
@@ -1830,53 +2045,143 @@ class MainWindow(QMainWindow, WindowMixin):
         print(f'Language changed to: {locale}')
 
     def create_shape(self):
+        """Beginner: draw a plain rectangle (no keypoints)."""
         assert self.beginner()
+        self.create_intent = 'rectangle'
+        self.canvas.create_shape_type = 'rectangle'
         self.canvas.set_editing(False)
-        self.actions.create.setEnabled(False)
+        self.sync_create_actions_enabled(allow_start_draw=False)
+
+    def create_pose_shape(self):
+        """Beginner: draw bbox then place pose keypoints."""
+        assert self.beginner()
+        if not self.can_pose_annotate():
+            QMessageBox.information(
+                self,
+                self.get_str('warningTitle'),
+                self.get_str('crtPoseNeedPoseProject'),
+            )
+            return
+        self.create_intent = 'pose'
+        self.canvas.create_shape_type = 'pose'
+        self.canvas.set_editing(False)
+        self.sync_create_actions_enabled(allow_start_draw=False)
+
+    def create_polygon_shape(self):
+        """Beginner: click vertices to draw a polygon."""
+        assert self.beginner()
+        self.create_intent = 'polygon'
+        self.canvas.create_shape_type = 'polygon'
+        self.canvas.set_editing(False)
+        self.sync_create_actions_enabled(allow_start_draw=False)
+        tip = self.get_str('crtPolyTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+
+    def create_ellipse_shape(self):
+        """Beginner: drag to draw an ellipse (stays ellipse)."""
+        assert self.beginner()
+        self.create_intent = 'ellipse'
+        self.canvas.create_shape_type = 'ellipse'
+        self.canvas.set_editing(False)
+        self.sync_create_actions_enabled(allow_start_draw=False)
+        tip = self.get_str('crtEllipseTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+        self.canvas.setFocus()
+
+    def create_circle_shape(self):
+        """Beginner: drag to draw a circle (stays circle)."""
+        assert self.beginner()
+        self.create_intent = 'circle'
+        self.canvas.create_shape_type = 'circle'
+        self.canvas.set_editing(False)
+        self.sync_create_actions_enabled(allow_start_draw=False)
+        tip = self.get_str('crtCircleTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+        self.canvas.setFocus()
 
     def toggle_drawing_sensitive(self, drawing=True):
         """In the middle of drawing, toggling between modes should be disabled."""
         self.actions.editMode.setEnabled(not drawing)
+        # Don't treat end-of-bbox as cancel while placing pose keypoints
+        if not drawing and getattr(self.canvas, 'placing_keypoints', False):
+            return
         if not drawing and self.beginner():
             # Cancel creation.
             print('Cancel creation.')
             self.canvas.set_editing(True)
             self.canvas.restore_cursor()
-            self.actions.create.setEnabled(True)
+            self.sync_create_actions_enabled(allow_start_draw=True)
 
     def toggle_draw_mode(self, edit=True):
         self.canvas.set_editing(edit)
-        self.actions.createMode.setEnabled(edit)
         self.actions.editMode.setEnabled(not edit)
+        # edit=True → ready to start a new draw; edit=False → already in create mode
+        self.sync_create_actions_enabled(allow_start_draw=edit)
 
     def set_create_mode(self):
         assert self.advanced()
+        self.create_intent = 'rectangle'
+        self.canvas.create_shape_type = 'rectangle'
         self.toggle_draw_mode(False)
+
+    def set_create_pose_mode(self):
+        assert self.advanced()
+        if not self.can_pose_annotate():
+            QMessageBox.information(
+                self,
+                self.get_str('warningTitle'),
+                self.get_str('crtPoseNeedPoseProject'),
+            )
+            return
+        self.create_intent = 'pose'
+        self.canvas.create_shape_type = 'pose'
+        self.toggle_draw_mode(False)
+
+    def set_create_polygon_mode(self):
+        assert self.advanced()
+        self.create_intent = 'polygon'
+        self.canvas.create_shape_type = 'polygon'
+        self.toggle_draw_mode(False)
+        tip = self.get_str('crtPolyTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+
+    def set_create_ellipse_mode(self):
+        assert self.advanced()
+        self.create_intent = 'ellipse'
+        self.canvas.create_shape_type = 'ellipse'
+        self.toggle_draw_mode(False)
+        tip = self.get_str('crtEllipseTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+        self.canvas.setFocus()
+
+    def set_create_circle_mode(self):
+        assert self.advanced()
+        self.create_intent = 'circle'
+        self.canvas.create_shape_type = 'circle'
+        self.toggle_draw_mode(False)
+        tip = self.get_str('crtCircleTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+        self.canvas.setFocus()
 
     def set_edit_mode(self):
         assert self.advanced()
         self.toggle_draw_mode(True)
         self.label_selection_changed()
 
-    def update_file_menu(self):
-        curr_file_path = self.file_path
-
-        def exists(filename):
-            return os.path.exists(filename)
-
-        menu = self.menus.recentFiles
-        menu.clear()
-        files = [f for f in self.recent_files if f !=
-                 curr_file_path and exists(f)]
-        for i, f in enumerate(files):
-            icon = new_icon('labels')
-            action = QAction(
-                icon, '&%d %s' % (i + 1, QFileInfo(f).fileName()), self)
-            action.triggered.connect(partial(self.load_recent, f))
-            menu.addAction(action)
-
     def pop_label_list_menu(self, point):
         self.menus.labelList.exec_(self.label_list.mapToGlobal(point))
+
+    def pop_completed_list_menu(self, point):
+        """Context menu on completed-annotations list (verify / unverify)."""
+        if not self.file_list_widget.itemAt(point):
+            return
+        self.menus.completedList.exec_(self.file_list_widget.mapToGlobal(point))
 
     def edit_label(self):
         # Allow editing label by double-clicking on shape (from canvas signal)
@@ -1885,9 +2190,13 @@ class MainWindow(QMainWindow, WindowMixin):
         if not item:
             return
         text = self.label_dialog.pop_up(item.text())
-        if text is not None:
+        if text is not None and text != item.text():
+            self.push_annotation_undo('edit label')
             item.setText(text)
             item.setBackground(generate_color_by_text(text))
+            shape = self.items_to_shapes.get(item)
+            if shape is not None:
+                shape.label = text
             self.set_dirty()
             self.update_combo_box()
 
@@ -1961,17 +2270,16 @@ class MainWindow(QMainWindow, WindowMixin):
                 self, 
                 self.get_str('warningTitle'), 
                 self.get_str('imageNotFound').format(base_name) + '\n\n'
-                '请在 images/ 目录或项目根目录中添加该图像。'
+                + self.get_str('imageNotFoundHint')
             )
             return
         
         # Load the image and annotation
         print(f'Loading image: {image_path}')
         self.load_file(image_path)
-        
-        # After loading, refresh the completed annotations list
-        # because load_file may have cleared it
-        self.update_completed_annotations_list()
+        # Avoid full list rebuild (clear+rescans) — it resets scroll and looks like items jump.
+        # Only rebuild if load_file wiped the list; otherwise just re-highlight.
+        self._sync_completed_list_selection_after_load()
     
     def pending_item_double_clicked(self, item=None):
         """Double click on pending image to start annotation"""
@@ -1982,10 +2290,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 return  # User cancelled or no save path
             
             self.load_file(image_path)
-            
-            # After loading, refresh the completed annotations list
-            # because load_file may have cleared it
-            self.update_completed_annotations_list()
+            self._sync_completed_list_selection_after_load()
     
     def add_images_to_pending(self):
         """Add individual images to pending queue"""
@@ -1994,7 +2299,7 @@ class MainWindow(QMainWindow, WindowMixin):
             return
         
         formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
-        filters = "Image files (%s)" % ' '.join(formats)
+        filters = self.get_str('imageFilesFilter').format(' '.join(formats))
         
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
@@ -2027,7 +2332,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         dir_path = QFileDialog.getExistingDirectory(
             self,
-            '选择图像文件夹',
+            self.get_str('selectImageFolder'),
             self.current_project.project_dir or '.',
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
@@ -2164,8 +2469,37 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.file_list_widget.addItem(item)
             
             print(f'Updated completed annotations list: {self.file_list_widget.count()} items')
+            # clear() drops selection; restore highlight for the open image
+            self._highlight_current_in_completed_list()
         except Exception as e:
             print(f'Error updating completed annotations list: {e}')
+
+    def _sync_completed_list_selection_after_load(self):
+        """After opening an image, keep completed-list selection without needless rebuild."""
+        if self.file_list_widget.count() == 0:
+            self.update_completed_annotations_list()
+        else:
+            self._highlight_current_in_completed_list(scroll_if_needed=True)
+
+    def _highlight_current_in_completed_list(self, scroll_if_needed=True):
+        """Select the completed-list row matching the currently open image."""
+        if not getattr(self, 'file_path', None) or self.file_list_widget.count() == 0:
+            return
+        base = os.path.splitext(os.path.basename(self.file_path))[0]
+        if not base:
+            return
+        for i in range(self.file_list_widget.count()):
+            item = self.file_list_widget.item(i)
+            if os.path.splitext(item.text())[0] == base:
+                self.file_list_widget.clearSelection()
+                self.file_list_widget.setCurrentItem(item)
+                item.setSelected(True)
+                if scroll_if_needed:
+                    # Only scroll when the row is outside the viewport (avoid jump)
+                    vr = self.file_list_widget.visualItemRect(item)
+                    if not self.file_list_widget.viewport().rect().contains(vr):
+                        self.file_list_widget.scrollToItem(item)
+                return
     
     def _check_if_verified(self, annotation_file):
         """Check if an annotation file is verified"""
@@ -2222,8 +2556,8 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.delete.setEnabled(selected)
         self.actions.copy.setEnabled(selected)
         self.actions.edit.setEnabled(selected)
-        self.actions.shapeLineColor.setEnabled(selected)
-        self.actions.shapeFillColor.setEnabled(selected)
+        if hasattr(self.actions, 'shapeStyle'):
+            self.actions.shapeStyle.setEnabled(selected)
 
     def add_label(self, shape):
         shape.paint_label = self.display_label_option.isChecked()
@@ -2250,8 +2584,22 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def load_labels(self, shapes):
         s = []
-        for label, points, line_color, fill_color, difficult in shapes:
-            shape = Shape(label=label)
+        for item in shapes:
+            # Compatible tuples:
+            # (label, points, line_color, fill_color, difficult)
+            # (+ keypoints, shape_type[, keypoint_names, skeleton])
+            label = item[0]
+            points = item[1]
+            line_color = item[2] if len(item) > 2 else None
+            fill_color = item[3] if len(item) > 3 else None
+            difficult = item[4] if len(item) > 4 else False
+            keypoints = item[5] if len(item) > 5 else None
+            shape_type = item[6] if len(item) > 6 else ('pose' if keypoints else 'rectangle')
+            keypoint_names = item[7] if len(item) > 7 else None
+            skeleton = item[8] if len(item) > 8 else None
+            line_width = item[9] if len(item) > 9 else None
+
+            shape = Shape(label=label, shape_type=shape_type or 'rectangle')
             for x, y in points:
 
                 # Ensure the labels are within the bounds of the image. If not, fix them.
@@ -2261,6 +2609,21 @@ class MainWindow(QMainWindow, WindowMixin):
 
                 shape.add_point(QPointF(x, y))
             shape.difficult = difficult
+            if keypoints:
+                shape.set_keypoints_from_list(keypoints)
+            if keypoint_names:
+                shape.keypoint_names = list(keypoint_names)
+            elif self.current_project and getattr(self.current_project, 'keypoint_names', None):
+                shape.keypoint_names = list(self.current_project.keypoint_names)
+            if skeleton:
+                shape.skeleton = [list(e) for e in skeleton]
+            elif self.current_project and getattr(self.current_project, 'skeleton', None):
+                shape.skeleton = [list(e) for e in self.current_project.skeleton]
+            if line_width is not None:
+                try:
+                    shape.line_width = float(line_width)
+                except (TypeError, ValueError):
+                    pass
             shape.close()
             s.append(shape)
 
@@ -2323,11 +2686,19 @@ class MainWindow(QMainWindow, WindowMixin):
             self.label_file.verified = self.canvas.verified
 
         def format_shape(s):
-            return dict(label=s.label,
-                        line_color=s.line_color.getRgb(),
-                        fill_color=s.fill_color.getRgb(),
-                        points=[(p.x(), p.y()) for p in s.points],
-                        difficult=s.difficult)
+            return dict(
+                label=s.label,
+                line_color=s.line_color.getRgb(),
+                fill_color=s.fill_color.getRgb(),
+                line_width=float(getattr(s, 'line_width', Shape.default_line_width)),
+                points=[(p.x(), p.y()) for p in s.points],
+                difficult=s.difficult,
+                shape_type=getattr(s, 'shape_type', 'rectangle'),
+                type=getattr(s, 'shape_type', 'rectangle'),
+                keypoints=[dict(k) for k in getattr(s, 'keypoints', []) or []],
+                keypoint_names=list(getattr(s, 'keypoint_names', []) or []),
+                skeleton=[list(e) for e in getattr(s, 'skeleton', []) or []],
+            )
 
         shapes = [format_shape(shape) for shape in self.canvas.shapes]
         
@@ -2359,9 +2730,11 @@ class MainWindow(QMainWindow, WindowMixin):
             return False
 
     def copy_selected_shape(self):
+        self.push_annotation_undo('copy')
         self.add_label(self.canvas.copy_selected_shape())
         # fix copy and delete
         self.shape_selection_changed(True)
+        self.set_dirty()
 
     def combo_selection_changed(self, index):
         """
@@ -2457,17 +2830,63 @@ class MainWindow(QMainWindow, WindowMixin):
         # Add Chris
         self.diffc_button.setChecked(False)
         if text is not None:
+            # Snapshot without the just-finalized box so Undo removes the create
+            prev = []
+            for s in self.canvas.shapes[:-1]:
+                c = s.copy()
+                c.selected = False
+                prev.append(c)
+            self.annotation_undo.push(prev, 'create')
+            if hasattr(self.actions, 'undo'):
+                self.actions.undo.setEnabled(True)
+
             self.prev_label_text = text
             generate_color = generate_color_by_text(text)
             shape = self.canvas.set_last_label(text, generate_color, generate_color)
             self.add_label(shape)
-            # Stay in create mode to allow continuous annotation
-            # Only switch to edit mode when user explicitly clicks edit button
-            if self.beginner():
-                self.canvas.set_editing(False)  # Stay in create mode
-                self.actions.create.setEnabled(True)
+
+            # Pose only when user clicked the Pose button (not Rectangle)
+            want_pose = (
+                getattr(self, 'create_intent', 'rectangle') == 'pose'
+                and self.can_pose_annotate()
+            )
+            if want_pose:
+                shape.shape_type = 'pose'
+                shape.keypoint_names = list(self.current_project.keypoint_names)
+                shape.skeleton = [list(e) for e in self.current_project.skeleton]
+                self.canvas.set_editing(True)
+                self.canvas.begin_keypoint_placement(
+                    shape,
+                    int(self.current_project.kpt_shape[0]),
+                    names=self.current_project.keypoint_names,
+                    skeleton=self.current_project.skeleton,
+                )
+                # begin_keypoint_placement emits drawingPolygon(False), which may
+                # re-enable Create via toggle_drawing_sensitive — disable again.
+                self.sync_create_actions_enabled(allow_start_draw=False)
+                self.canvas.setFocus()
+                names = ', '.join(self.current_project.keypoint_names or [])
+                tip = self.get_str('poseModeStatusTip').format(names)
+                if hasattr(self, 'statusBar') and self.statusBar():
+                    self.statusBar().showMessage(tip)
+                print(tip)
             else:
-                self.actions.createMode.setEnabled(True)
+                intent = getattr(self, 'create_intent', 'rectangle')
+                st = getattr(shape, 'shape_type', None)
+                if intent == 'polygon' or st == 'polygon':
+                    shape.shape_type = 'polygon'
+                elif intent in ('ellipse', 'circle') or st in ('ellipse', 'circle'):
+                    # Type is fixed by the tool used (ellipse tool / circle tool)
+                    if st not in ('ellipse', 'circle'):
+                        shape.shape_type = (
+                            'circle' if intent == 'circle' else 'ellipse'
+                        )
+                else:
+                    shape.shape_type = 'rectangle'
+                # Return to edit mode so user can drag/move immediately
+                self.canvas.set_editing(True)
+                self.actions.editMode.setEnabled(True)
+                self.sync_create_actions_enabled(allow_start_draw=True)
             self.set_dirty()
 
             # Don't add the default prompt text as a label
@@ -2479,6 +2898,21 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             # self.canvas.undoLastLine()
             self.canvas.reset_all_lines()
+
+    def on_keypoint_placement_progress(self, index, total, name):
+        msg = self.get_str('posePlacementProgress').format(index + 1, total, name)
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(msg)
+        print(msg)
+
+    def on_keypoint_placement_finished(self):
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(self.get_str('posePlacementDone'), 3000)
+        # Back to edit: drag box/keypoints without clicking an extra mode button
+        self.canvas.set_editing(True)
+        self.actions.editMode.setEnabled(True)
+        self.sync_create_actions_enabled(allow_start_draw=True)
+        self.set_dirty()
 
     def scroll_request(self, delta, orientation):
         units = - delta / (8 * 15)
@@ -2611,6 +3045,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def load_file(self, file_path=None):
         """Load the specified file, or the last opened file if None."""
         self.reset_state()
+        self.clear_annotation_undo()
         self.canvas.setEnabled(False)
         if file_path is None:
             file_path = self.settings.get(SETTING_FILENAME)
@@ -2701,6 +3136,9 @@ class MainWindow(QMainWindow, WindowMixin):
             # and is managed independently by update_completed_annotations_list()
             if not self.current_project and self.file_list_widget.count() > 0:
                 self.update_file_list_colors()
+            else:
+                # Project mode: keep current image highlighted in completed list
+                self._highlight_current_in_completed_list()
             
             return True
         return False
@@ -2749,9 +3187,11 @@ class MainWindow(QMainWindow, WindowMixin):
                 json_path = os.path.join(anno_dir, basename + JSON_EXT)
 
             """Annotation file priority:
-            PascalXML > YOLO > CreateML
+            Pose/JSON (LabelCraft) > PascalXML > YOLO(-Pose) > CreateML
             """
-            if os.path.isfile(xml_path):
+            if os.path.isfile(json_path) and self._json_looks_like_labelcraft(json_path):
+                self.load_labelcraft_json_by_filename(json_path)
+            elif os.path.isfile(xml_path):
                 self.load_pascal_xml_by_filename(xml_path)
             elif os.path.isfile(txt_path):
                 self.load_yolo_txt_by_filename(txt_path)
@@ -2763,12 +3203,23 @@ class MainWindow(QMainWindow, WindowMixin):
             txt_path = os.path.splitext(file_path)[0] + TXT_EXT
             json_path = os.path.splitext(file_path)[0] + JSON_EXT
 
-            if os.path.isfile(xml_path):
+            if os.path.isfile(json_path) and self._json_looks_like_labelcraft(json_path):
+                self.load_labelcraft_json_by_filename(json_path)
+            elif os.path.isfile(xml_path):
                 self.load_pascal_xml_by_filename(xml_path)
             elif os.path.isfile(txt_path):
                 self.load_yolo_txt_by_filename(txt_path)
             elif os.path.isfile(json_path):
                 self.load_create_ml_json_by_filename(json_path, file_path)
+
+    @staticmethod
+    def _json_looks_like_labelcraft(json_path):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return isinstance(data, dict) and 'annotations' in data and 'image' in data
+        except Exception:
+            return False
 
     def resizeEvent(self, event):
         if self.canvas and not self.image.isNull() \
@@ -3066,19 +3517,21 @@ class MainWindow(QMainWindow, WindowMixin):
             self.current_project.format = format_names.get(new_format, 'PASCAL_VOC')
         
         print(f'Output format changed from {old_format} to {new_format}')
-        self.statusBar().showMessage(f'输出格式已更改为: {self.output_format_combo.currentText()}')
+        self.statusBar().showMessage(
+            f'{self.get_str("outputFormatChanged")} {self.output_format_combo.currentText()}')
 
     def open_annotation_dialog(self, _value=False):
         if self.file_path is None:
-            self.statusBar().showMessage('Please select image first')
+            self.statusBar().showMessage(self.get_str('pleaseSelectImageFirst'))
             self.statusBar().show()
             return
 
         path = os.path.dirname(ustr(self.file_path)) \
             if self.file_path else '.'
         if self.label_file_format == LabelFileFormat.PASCAL_VOC:
-            filters = "Open Annotation XML file (%s)" % ' '.join(['*.xml'])
-            filename = ustr(QFileDialog.getOpenFileName(self, '%s - Choose a xml file' % __appname__, path, filters))
+            filters = self.get_str('openAnnotationXmlFilter').format(' '.join(['*.xml']))
+            filename = ustr(QFileDialog.getOpenFileName(
+                self, self.get_str('chooseAnnotationXml').format(__appname__), path, filters))
             if filename:
                 if isinstance(filename, (tuple, list)):
                     filename = filename[0]
@@ -3086,8 +3539,9 @@ class MainWindow(QMainWindow, WindowMixin):
 
         elif self.label_file_format == LabelFileFormat.CREATE_ML:
 
-            filters = "Open Annotation JSON file (%s)" % ' '.join(['*.json'])
-            filename = ustr(QFileDialog.getOpenFileName(self, '%s - Choose a json file' % __appname__, path, filters))
+            filters = self.get_str('openAnnotationJsonFilter').format(' '.join(['*.json']))
+            filename = ustr(QFileDialog.getOpenFileName(
+                self, self.get_str('chooseAnnotationJson').format(__appname__), path, filters))
             if filename:
                 if isinstance(filename, (tuple, list)):
                     filename = filename[0]
@@ -3104,10 +3558,11 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             default_open_dir_path = os.path.dirname(self.file_path) if self.file_path else '.'
         if silent != True:
-            target_dir_path = ustr(QFileDialog.getExistingDirectory(self,
-                                                                    '%s - Open Directory' % __appname__,
-                                                                    default_open_dir_path,
-                                                                    QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
+            target_dir_path = ustr(QFileDialog.getExistingDirectory(
+                self,
+                self.get_str('openDirectoryTitle').format(__appname__),
+                default_open_dir_path,
+                QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks))
         else:
             target_dir_path = ustr(default_open_dir_path)
         
@@ -3124,11 +3579,8 @@ class MainWindow(QMainWindow, WindowMixin):
         if has_existing_annotations and old_anno_dir != target_dir_path:
             reply = QMessageBox.warning(
                 self,
-                '⚠️ 警告：修改输出路径',
-                f'当前输出目录已有标注文件！\n\n'
-                f'旧目录：{old_anno_dir}\n'
-                f'新目录：{target_dir_path}\n\n'
-                '是否迁移现有标注文件到新目录？',
+                self.get_str('warningChangeOutputPath'),
+                self.get_str('migrateOutputPathConfirm').format(old_anno_dir, target_dir_path),
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
                 QMessageBox.Cancel
             )
@@ -3302,7 +3754,7 @@ class MainWindow(QMainWindow, WindowMixin):
         """Verify all completed annotations in the file list"""
         # Get annotation files from completed annotations list
         if self.file_list_widget.count() == 0:
-            QMessageBox.warning(self, self.get_str('warningTitle'), 'No completed annotations found')
+            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noCompletedAnnotations'))
             return
         
         # Determine annotation directory
@@ -3329,14 +3781,14 @@ class MainWindow(QMainWindow, WindowMixin):
                 annotation_files.append((filename, filepath))
         
         if not annotation_files:
-            QMessageBox.warning(self, self.get_str('warningTitle'), 'No annotation files found')
+            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noAnnotationFilesFound'))
             return
         
         # Confirm with user
         reply = QMessageBox.question(
             self,
             self.get_str('confirmTitle'),
-            f'Mark {len(annotation_files)} annotation(s) as verified?',
+            self.get_str('confirmVerifyAll').format(len(annotation_files)),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -3392,9 +3844,9 @@ class MainWindow(QMainWindow, WindowMixin):
                 failed_count += 1
         
         # Show result
-        result_msg = f'Successfully marked {updated_count} annotation(s) as verified'
+        result_msg = self.get_str('verifyAllResult').format(updated_count)
         if failed_count > 0:
-            result_msg += f'\n{failed_count} failed'
+            result_msg += '\n' + self.get_str('verifyFailedCount').format(failed_count)
         
         QMessageBox.information(self, self.get_str('successTitle'), result_msg)
         
@@ -3409,13 +3861,17 @@ class MainWindow(QMainWindow, WindowMixin):
             self.load_file(self.file_path)
     
     def set_selected_verified(self, verified=True):
-        """Set selected annotation files as verified or unverified"""
+        """Set selected annotation files as verified or unverified (status bar feedback only)."""
         selected_items = self.file_list_widget.selectedItems()
-        
+
+        def _status(msg, timeout=4000):
+            if hasattr(self, 'statusBar') and self.statusBar():
+                self.statusBar().showMessage(msg, timeout)
+
         if not selected_items:
-            QMessageBox.warning(self, self.get_str('warningTitle'), 'No annotations selected')
+            _status(self.get_str('noAnnotationsSelected'))
             return
-        
+
         # Determine annotation directory
         anno_dir = None
         if self.current_project and self.current_project.annotation_dir:
@@ -3426,79 +3882,77 @@ class MainWindow(QMainWindow, WindowMixin):
             anno_dir = os.path.join(self.default_save_dir, 'annotations')
             if not os.path.exists(anno_dir):
                 anno_dir = self.default_save_dir
-        
+
         if not anno_dir or not os.path.exists(anno_dir):
-            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('annoDirNotFound'))
+            _status(self.get_str('annoDirNotFound'))
             return
-        
+
         # Process selected items
         updated_count = 0
         failed_count = 0
-        
+
         for item in selected_items:
             filename = item.text()
             filepath = os.path.join(anno_dir, filename)
-            
+
             if not os.path.exists(filepath):
                 failed_count += 1
                 continue
-            
+
             try:
                 ext = os.path.splitext(filename)[1].lower()
-                
+
                 if ext == '.xml':
                     # Handle PASCAL VOC format - directly modify verified attribute
                     from lxml import etree
-                    
+
                     # Parse the XML file
                     tree = etree.parse(filepath)
                     root = tree.getroot()
-                    
+
                     # Update verified attribute
                     if verified:
                         root.set('verified', 'yes')
                     else:
                         root.set('verified', 'no')
-                    
+
                     # Write back to file with proper formatting
                     xml_str = etree.tostring(root, pretty_print=True, xml_declaration=True, encoding='UTF-8')
-                    
+
                     with open(filepath, 'wb') as f:
                         f.write(xml_str)
-                    
+
                     updated_count += 1
-                    
+
                 elif ext == '.json':
                     # Handle LabelCraft JSON format
                     import json
                     with open(filepath, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    
+
                     if 'metadata' not in data:
                         data['metadata'] = {}
                     data['metadata']['verified'] = verified
                     data['metadata']['updated_at'] = __import__('datetime').datetime.now().isoformat()
-                    
+
                     with open(filepath, 'w', encoding='utf-8') as f:
                         json.dump(data, f, indent=2, ensure_ascii=False)
-                    
+
                     updated_count += 1
-                    
+
             except Exception as e:
                 print(f"Failed to update {filename}: {e}")
                 failed_count += 1
-        
-        # Show result
-        status = "verified" if verified else "unverified"
-        result_msg = f'Successfully marked {updated_count} annotation(s) as {status}'
+
+        status = self.get_str('verifiedState') if verified else self.get_str('unverifiedState')
+        result_msg = self.get_str('setVerifiedResult').format(updated_count, status)
         if failed_count > 0:
-            result_msg += f'\n{failed_count} failed'
-        
-        QMessageBox.information(self, self.get_str('successTitle'), result_msg)
-        
+            result_msg += '  ' + self.get_str('verifyFailedCount').format(failed_count)
+        _status(result_msg)
+
         # Mark as dirty so save button becomes enabled
         self.set_dirty()
-        
+
         # Refresh file list to update colors
         self.update_completed_annotations_list()
 
@@ -3517,7 +3971,7 @@ class MainWindow(QMainWindow, WindowMixin):
                     original_list.append(self.pending_list_widget.item(i).text())
                 
                 if not original_list:
-                    QMessageBox.warning(self, self.get_str('warningTitle'), 'No images in project pending list')
+                    QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noImagesInPending'))
                     self.actions.filterUnverified.setChecked(False)
                     return
             elif self.m_img_list:
@@ -3708,7 +4162,8 @@ class MainWindow(QMainWindow, WindowMixin):
         path = os.path.dirname(ustr(self.file_path)) if self.file_path else '.'
         formats = ['*.%s' % fmt.data().decode("ascii").lower() for fmt in QImageReader.supportedImageFormats()]
         filters = "Image & Label files (%s)" % ' '.join(formats + ['*%s' % LabelFile.suffix])
-        filename, _ = QFileDialog.getOpenFileName(self, '%s - Choose Image or Label file' % __appname__, path, filters)
+        filename, _ = QFileDialog.getOpenFileName(
+            self, self.get_str('chooseImageOrLabel').format(__appname__), path, filters)
         if filename:
             if isinstance(filename, (tuple, list)):
                 filename = filename[0]
@@ -3762,7 +4217,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def _save_file(self, annotation_file_path):
         if annotation_file_path and self.save_labels(annotation_file_path):
             self.set_clean()
-            self.statusBar().showMessage('Saved to  %s' % annotation_file_path)
+            self.statusBar().showMessage(self.get_str('savedToPath').format(annotation_file_path))
             self.statusBar().show()
             
             # After saving, mark as annotated (green color) instead of removing
@@ -3880,8 +4335,9 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def discard_changes_dialog(self):
         yes, no, cancel = QMessageBox.Yes, QMessageBox.No, QMessageBox.Cancel
-        msg = u'You have unsaved changes, would you like to save them and proceed?\nClick "No" to undo all changes.'
-        return QMessageBox.warning(self, u'Attention', msg, yes | no | cancel)
+        return QMessageBox.warning(
+            self, self.get_str('attentionTitle'), self.get_str('discardChangesMsg'),
+            yes | no | cancel)
 
     def error_message(self, title, message):
         return QMessageBox.critical(self, title,
@@ -3891,7 +4347,7 @@ class MainWindow(QMainWindow, WindowMixin):
         return os.path.dirname(self.file_path) if self.file_path else '.'
 
     def choose_color1(self):
-        color = self.color_dialog.getColor(self.line_color, u'Choose line color',
+        color = self.color_dialog.getColor(self.line_color, self.get_str('chooseLineColor'),
                                            default=DEFAULT_LINE_COLOR)
         if color:
             self.line_color = color
@@ -3900,38 +4356,169 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.update()
             self.set_dirty()
 
+    def push_annotation_undo(self, description=''):
+        """Snapshot current shapes for Ctrl+Z (geometry/label edits; not style dialog)."""
+        if not hasattr(self, 'annotation_undo'):
+            return
+        snap = []
+        for s in self.canvas.shapes:
+            c = s.copy()
+            c.selected = False
+            snap.append(c)
+        self.annotation_undo.push(snap, description)
+        if hasattr(self.actions, 'undo'):
+            self.actions.undo.setEnabled(True)
+
+    def clear_annotation_undo(self):
+        if hasattr(self, 'annotation_undo'):
+            self.annotation_undo.clear()
+        self._annotation_undo_armed = True
+        if hasattr(self.actions, 'undo'):
+            self.actions.undo.setEnabled(False)
+
+    def on_annotation_edit_about_to_begin(self):
+        """Canvas is about to change geometry / place a keypoint."""
+        if self._annotation_undo_armed:
+            self.push_annotation_undo('edit')
+            self._annotation_undo_armed = False
+
+    def on_annotation_edit_gesture_finished(self):
+        self._annotation_undo_armed = True
+
+    def undo_annotation_edit(self):
+        """Restore previous annotation snapshot."""
+        if not hasattr(self, 'annotation_undo') or not self.annotation_undo.can_undo():
+            return
+        shapes, description = self.annotation_undo.pop()
+        if shapes is None:
+            return
+        self.canvas.load_shapes(shapes)
+        self.label_list.clear()
+        self.items_to_shapes = {}
+        self.shapes_to_items = {}
+        for shape in self.canvas.shapes:
+            shape.selected = False
+            self.add_label(shape)
+        self.canvas.de_select_shape()
+        self.canvas.update()
+        self.set_dirty()
+        if hasattr(self.actions, 'undo'):
+            self.actions.undo.setEnabled(self.annotation_undo.can_undo())
+        tip = description or 'edit'
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(self.get_str('undoAnnotationDone').format(tip), 2500)
+
     def delete_selected_shape(self):
+        # Pose: if a keypoint is highlighted, clear that slot (keep K order)
+        if getattr(self.canvas, 'selected_keypoint', lambda: False)() and self.canvas.h_shape:
+            self.push_annotation_undo('clear keypoint')
+            if self.canvas.h_shape.clear_keypoint(self.canvas.h_keypoint):
+                self.canvas.update()
+                self.set_dirty()
+                if hasattr(self, 'statusBar') and self.statusBar():
+                    idx = self.canvas.h_keypoint
+                    self.statusBar().showMessage(
+                        f'Cleared keypoint #{idx + 1} (v=0). Delete again with no keypoint selected to remove whole box.',
+                        4000,
+                    )
+                return
+            # clear failed — drop empty undo
+            if self.annotation_undo.can_undo():
+                self.annotation_undo.pop()
+                self.actions.undo.setEnabled(self.annotation_undo.can_undo())
+            return
+        # During pose placement: Backspace/Delete undoes last point
+        if getattr(self.canvas, 'placing_keypoints', False) and self.canvas.pose_target_shape:
+            self.push_annotation_undo('remove keypoint')
+            if self.canvas.pose_target_shape.remove_last_keypoint() is not None:
+                placed = len(self.canvas.pose_target_shape.keypoints)
+                name = (self.canvas.pose_keypoint_names[placed]
+                        if placed < len(self.canvas.pose_keypoint_names) else str(placed))
+                self.canvas.keypointPlacementProgress.emit(
+                    placed, self.canvas.expected_kpt_count, name)
+                self.canvas.update()
+                self.set_dirty()
+                return
+            if self.annotation_undo.can_undo():
+                self.annotation_undo.pop()
+                self.actions.undo.setEnabled(self.annotation_undo.can_undo())
+            return
+
+        if not self.canvas.selected_shape:
+            return
+        self.push_annotation_undo('delete')
         self.remove_label(self.canvas.delete_selected())
         self.set_dirty()
         if self.no_shapes():
             for action in self.actions.onShapesPresent:
                 action.setEnabled(False)
 
-    def choose_shape_line_color(self):
-        color = self.color_dialog.getColor(self.line_color, u'Choose Line Color',
-                                           default=DEFAULT_LINE_COLOR)
-        if color:
-            self.canvas.selected_shape.line_color = color
+    def choose_shape_style(self):
+        """Open style dialog for the selected annotation box."""
+        shape = self.canvas.selected_shape
+        if not shape:
+            QMessageBox.information(
+                self,
+                self.get_str('warningTitle'),
+                self.get_str('shapeStyleNeedSelect'),
+            )
+            return
+        line_c = QColor(shape.line_color if shape.line_color else (self.line_color or DEFAULT_LINE_COLOR))
+        fill_c = QColor(shape.fill_color if shape.fill_color else (self.fill_color or DEFAULT_FILL_COLOR))
+        width = int(round(float(getattr(shape, 'line_width', Shape.default_line_width) or 2)))
+        # Snapshot for Cancel restore
+        backup = (
+            QColor(line_c),
+            QColor(fill_c),
+            float(getattr(shape, 'line_width', Shape.default_line_width) or width),
+        )
+
+        def _live_preview(line_color, fill_color, line_width):
+            shape.line_color = line_color
+            shape.fill_color = fill_color
+            shape.line_width = float(line_width)
+            shape.fill = True
+            self.canvas.update()
+
+        dlg = ShapeStyleDialog(
+            parent=self,
+            line_color=line_c,
+            fill_color=fill_c,
+            line_width=width,
+            on_preview=_live_preview,
+        )
+        if dlg.exec():
+            line_color, fill_color, line_width = dlg.result_style()
+            targets = list(self.canvas.shapes) if dlg.apply_to_all() else [shape]
+            for s in targets:
+                s.line_color = QColor(line_color)
+                s.fill_color = QColor(fill_color)
+                s.line_width = float(line_width)
+                s.fill = True
             self.canvas.update()
             self.set_dirty()
+        else:
+            shape.line_color, shape.fill_color, shape.line_width = backup
+            self.canvas.update()
+
+    # Backward-compatible aliases (menus / shortcuts may still reference these)
+    def choose_shape_line_color(self):
+        self.choose_shape_style()
 
     def choose_shape_fill_color(self):
-        color = self.color_dialog.getColor(self.fill_color, u'Choose Fill Color',
-                                           default=DEFAULT_FILL_COLOR)
-        if color:
-            self.canvas.selected_shape.fill_color = color
-            self.canvas.update()
-            self.set_dirty()
+        self.choose_shape_style()
 
     def copy_shape(self):
         if self.canvas.selected_shape is None:
             # True if one accidentally touches the left mouse button before releasing
             return
+        self.push_annotation_undo('copy')
         self.canvas.end_move(copy=True)
         self.add_label(self.canvas.selected_shape)
         self.set_dirty()
 
     def move_shape(self):
+        self.push_annotation_undo('move')
         self.canvas.end_move(copy=False)
         self.set_dirty()
 
@@ -4065,6 +4652,7 @@ class MainWindow(QMainWindow, WindowMixin):
         for label in self.current_project.labels:
             dialog.labels.append(label)
             dialog.label_list.addItem(label)
+        dialog.apply_pose_fields(self.current_project)
         
         if dialog.exec() == QDialog.Accepted:
             project_data = dialog.get_project_data()
@@ -4132,10 +4720,16 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.current_project.annotation_dir = annotation_dir
                 self.current_project.labels = project_data['labels']
                 self.current_project.format = project_data['format']
+                self.current_project.task = project_data.get('task', 'detect')
+                self.current_project.kpt_shape = list(project_data.get('kpt_shape') or [0, 3])
+                self.current_project.keypoint_names = list(project_data.get('keypoint_names') or [])
+                self.current_project.flip_idx = list(project_data.get('flip_idx') or [])
+                self.current_project.skeleton = [list(e) for e in (project_data.get('skeleton') or [])]
                 
                 print(f'Project updated:')
                 print(f'  project_dir: {self.current_project.project_dir}')
                 print(f'  annotation_dir: {self.current_project.annotation_dir}')
+                print(f'  task: {self.current_project.task}')
                 print(f'  Expected images dir: {os.path.join(self.current_project.project_dir, "images")}')
                 
                 # Save project file
@@ -4303,12 +4897,17 @@ class MainWindow(QMainWindow, WindowMixin):
                     name=project_data['name'],
                     project_dir=project_dir,
                     labels=project_data['labels'],
-                    format=project_data['format']
+                    format=project_data['format'],
+                    task=project_data.get('task', 'detect'),
+                    kpt_shape=project_data.get('kpt_shape'),
+                    keypoint_names=project_data.get('keypoint_names'),
+                    flip_idx=project_data.get('flip_idx'),
+                    skeleton=project_data.get('skeleton'),
                 )
                 
-                # Auto-save project file in the database directory
+                # Auto-save project file in the database directory (.lbc)
                 project_name = project_data['name'].replace(' ', '_')
-                project_file = os.path.join(project_dir, f'{project_name}.labelcraft')
+                project_file = os.path.join(project_dir, f'{project_name}{PROJECT_EXT}')
                 project.save(project_file)
                 
                 # Load the project
@@ -4332,7 +4931,7 @@ class MainWindow(QMainWindow, WindowMixin):
             self,
             self.get_str('openProjectTitle'),
             self.last_open_dir or '.',
-            'LabelCraft Project (*.labelcraft);;All Files (*)'
+            project_file_filter()
         )
         
         if not file_path:
@@ -4363,8 +4962,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Update default save directory
         self.default_save_dir = project.annotation_dir
-        if hasattr(self, 'output_dir_label'):
-            self.output_dir_label.setText(project.annotation_dir or '未设置')
+        self._refresh_output_path_display()
         
         # Update output format
         format_map = {
@@ -4418,13 +5016,21 @@ class MainWindow(QMainWindow, WindowMixin):
         # Add to recent projects
         if project.project_file:
             RecentProjectsManager.add_project(project.project_file, project.name)
-        
+
+        # Rectangle always; Pose only for pose-task projects
+        self.sync_create_actions_enabled(allow_start_draw=True)
+        self.populate_mode_actions()
+
+        msg = self.get_str('projectLoaded').format(project.name)
+        if project.annotation_dir:
+            msg = f'{msg}  ({self.get_str("outputDir")}: {project.annotation_dir})'
+        self.statusBar().showMessage(msg, 5000)
         print(f'Project loaded: {project.name}')
     
     def save_project(self):
         """Save current project"""
         if not self.current_project:
-            QMessageBox.warning(self, '警告', '没有打开的项目')
+            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noOpenProject'))
             return
         
         try:
@@ -4435,23 +5041,25 @@ class MainWindow(QMainWindow, WindowMixin):
             # Save project file
             self.current_project.save()
             
-            QMessageBox.information(self, '成功', '项目已保存')
+            QMessageBox.information(self, self.get_str('successTitle'), self.get_str('projectSaved'))
             print(f'Project saved: {self.current_project.project_file}')
             
         except Exception as e:
-            QMessageBox.critical(self, '错误', f'保存项目失败:\n{str(e)}')
+            QMessageBox.critical(
+                self, self.get_str('errorTitle'),
+                f'{self.get_str("saveProjectFailed")}\n{str(e)}')
     
     def close_project(self):
         """Close current project after saving and reset to initial state"""
         if not self.current_project:
-            QMessageBox.warning(self, '警告', '没有打开的项目')
+            QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noOpenProject'))
             return
         
         # Ask user to confirm
         reply = QMessageBox.question(
             self,
-            '关闭项目',
-            f'是否保存并关闭项目 "{self.current_project.name}"？',
+            self.get_str('closeProjectTitle'),
+            self.get_str('confirmCloseProject').format(self.current_project.name),
             QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
             QMessageBox.Yes
         )
@@ -4475,13 +5083,15 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.current_project.save()
                 print(f'Project saved before closing: {self.current_project.project_file}')
             except Exception as e:
-                QMessageBox.critical(self, '错误', f'保存项目失败:\n{str(e)}')
+                QMessageBox.critical(
+                    self, self.get_str('errorTitle'),
+                    f'{self.get_str("saveProjectFailed2")}\n{str(e)}')
                 return
         
         # Reset to initial state
         self.reset_to_initial_state()
         
-        QMessageBox.information(self, '成功', '项目已关闭')
+        QMessageBox.information(self, self.get_str('successTitle'), self.get_str('projectClosed'))
         print('Project closed')
     
     def reset_to_initial_state(self):
@@ -4495,8 +5105,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Reset default save directory
         self.default_save_dir = None
-        if hasattr(self, 'output_dir_label'):
-            self.output_dir_label.setText(self.get_str('notSet'))
+        self._refresh_output_path_display()
         
         # Reset output format label
         self.label_file_format = LabelFileFormat.PASCAL_VOC
@@ -4542,8 +5151,15 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.editProject.setEnabled(False)
         
         # Disable annotation buttons when no project loaded
-        for action_item in [self.actions.create, self.actions.edit, self.actions.delete,
-                           self.actions.copy, self.actions.createMode, self.actions.editMode]:
+        for action_item in [self.actions.create, self.actions.createPose,
+                           self.actions.createPolygon, self.actions.createEllipse,
+                           self.actions.createCircle,
+                           self.actions.edit, self.actions.delete,
+                           self.actions.copy, self.actions.createMode,
+                           self.actions.createPoseMode,
+                           self.actions.createPolygonMode,
+                           self.actions.createEllipseMode,
+                           self.actions.createCircleMode, self.actions.editMode]:
             action_item.setEnabled(False)
         
         # Reset window title
@@ -4639,11 +5255,57 @@ class MainWindow(QMainWindow, WindowMixin):
             return
 
         self.set_format(FORMAT_YOLO)
-        t_yolo_parse_reader = YoloReader(txt_path, self.image)
-        shapes = t_yolo_parse_reader.get_shapes()
-        print(shapes)
+        use_pose = False
+        kpt_shape = None
+        class_list = None
+        if self.current_project and self.current_project.is_pose_task():
+            use_pose = True
+            kpt_shape = self.current_project.kpt_shape
+            class_list = list(self.current_project.labels)
+        elif file_looks_like_pose(txt_path):
+            use_pose = True
+            yaml_path = find_data_yaml(os.path.dirname(txt_path))
+            if yaml_path:
+                meta = parse_data_yaml(yaml_path)
+                kpt_shape = meta.get('kpt_shape')
+                if meta.get('names'):
+                    class_list = meta['names']
+                # Auto-upgrade open project / session toward pose if yaml found
+                if self.current_project and meta.get('kpt_shape'):
+                    self.current_project.task = 'pose'
+                    self.current_project.kpt_shape = list(meta['kpt_shape'])
+                    if meta.get('flip_idx') is not None:
+                        self.current_project.flip_idx = list(meta['flip_idx'])
+                    if not self.current_project.keypoint_names:
+                        k = int(meta['kpt_shape'][0])
+                        self.current_project.keypoint_names = [f'kpt{i}' for i in range(k)]
+
+        if use_pose:
+            reader = YOLOPoseReader(
+                txt_path,
+                self.image,
+                class_list=class_list,
+                kpt_shape=kpt_shape,
+            )
+            shapes = reader.get_shapes()
+            print(shapes)
+            self.load_labels(shapes)
+            self.canvas.verified = reader.verified
+        else:
+            t_yolo_parse_reader = YoloReader(txt_path, self.image)
+            shapes = t_yolo_parse_reader.get_shapes()
+            print(shapes)
+            self.load_labels(shapes)
+            self.canvas.verified = t_yolo_parse_reader.verified
+
+    def load_labelcraft_json_by_filename(self, json_path):
+        if self.file_path is None or not os.path.isfile(json_path):
+            return
+        reader = LabelCraftJSONReader(json_path)
+        shapes = reader.get_labelcraft_tuples()
         self.load_labels(shapes)
-        self.canvas.verified = t_yolo_parse_reader.verified
+        self.canvas.verified = reader.verified
+        self.label_file_format = LabelFileFormat.LABELCRAFT_JSON
 
     def load_create_ml_json_by_filename(self, json_path, file_path):
         if self.file_path is None:
@@ -4672,13 +5334,267 @@ class MainWindow(QMainWindow, WindowMixin):
     def toggle_draw_square(self):
         self.canvas.set_drawing_shape_to_square(self.draw_squares_option.isChecked())
 
+    def _resolve_image_for_annotation(self, anno_path):
+        """Find image path corresponding to an annotation file."""
+        base = os.path.splitext(os.path.basename(anno_path))[0]
+        exts = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp']
+        candidates = []
+        anno_dir = os.path.dirname(anno_path)
+        parent = os.path.dirname(anno_dir)
+        for folder in (
+            os.path.join(parent, 'images'),
+            anno_dir,
+            parent,
+            os.path.join(self.current_project.project_dir, 'images') if self.current_project else None,
+        ):
+            if not folder or not os.path.isdir(folder):
+                continue
+            for ext in exts:
+                p = os.path.join(folder, base + ext)
+                if os.path.isfile(p):
+                    return p
+        return None
+
+    def _annotation_file_to_pose_item(self, anno_path):
+        """Convert one annotation file to export item for YOLO-Pose."""
+        from libs.annotation_converter import AnnotationConverter
+
+        image_path = self._resolve_image_for_annotation(anno_path)
+        if not image_path:
+            return None
+
+        ext = os.path.splitext(anno_path)[1].lower()
+        classes = list(self.current_project.labels) if self.current_project else None
+        try:
+            if ext == '.json' and self._json_looks_like_labelcraft(anno_path):
+                data = AnnotationConverter.read_labelcraft_json(anno_path)
+            elif ext == '.txt':
+                classes_file = None
+                if self.current_project:
+                    classes_file = os.path.join(self.current_project.project_dir, 'classes.txt')
+                data = AnnotationConverter.read_yolo(anno_path, classes_file=classes_file)
+            elif ext == '.xml':
+                data = AnnotationConverter.read_voc(anno_path)
+            else:
+                return None
+        except Exception as e:
+            print(f'Pose export skip {anno_path}: {e}')
+            return None
+
+        anns = []
+        for ann in data.get('annotations', []):
+            # YOLO-Pose export: only real pose rows (avoid zero-padded polygon noise)
+            kpts = ann.get('keypoints') or []
+            is_pose = (ann.get('type') == 'pose') or bool(kpts)
+            if not is_pose:
+                continue
+            if ann.get('bbox_xyxy'):
+                bbox_xyxy = ann['bbox_xyxy']
+            else:
+                x, y, w, h = ann['bbox']
+                bbox_xyxy = [x, y, x + w, y + h]
+            anns.append({
+                'label': ann['label'],
+                'bbox_xyxy': bbox_xyxy,
+                'keypoints': kpts,
+            })
+        if not anns:
+            return None
+        return {'image_path': image_path or data.get('image_path'), 'annotations': anns}
+
+    def _export_format_display_name(self, fmt):
+        """Human-readable export format name for result dialog."""
+        if fmt == 'YOLO_POSE':
+            return self.get_str('exportFormatYoloPose')
+        if fmt == LabelFileFormat.LABELCRAFT_JSON:
+            return self.get_str('exportFormatLabelCraftJSON')
+        if fmt == LabelFileFormat.YOLO:
+            return self.get_str('exportFormatYoloDetect')
+        if fmt == LabelFileFormat.PASCAL_VOC:
+            return self.get_str('exportFormatVOC')
+        if fmt == LabelFileFormat.CREATE_ML:
+            return self.get_str('exportFormatCreateML')
+        if fmt == LabelFileFormat.COCO:
+            return 'COCO (JSON)'
+        if fmt == LabelFileFormat.CSV:
+            return 'CSV'
+        return str(getattr(fmt, 'name', fmt))
+
+    def _open_export_folder(self, folder_path):
+        """Open export directory in the system file manager."""
+        if not folder_path or not os.path.isdir(folder_path):
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(folder_path)))
+
+    def _show_export_result_dialog(self, title, body_lines, folder_path=None):
+        """Show a clearer export result dialog with optional Open Folder button."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle(title)
+        box.setText(title)
+        box.setInformativeText('\n'.join(line for line in body_lines if line is not None))
+        open_btn = None
+        if folder_path and os.path.isdir(folder_path):
+            open_btn = box.addButton(
+                self.get_str('exportOpenFolder'), QMessageBox.ButtonRole.AcceptRole
+            )
+        box.addButton(QMessageBox.StandardButton.Ok)
+        box.exec()
+        if open_btn is not None and box.clickedButton() == open_btn:
+            self._open_export_folder(folder_path)
+
+    def _make_export_progress_dialog(self, total):
+        """Modal progress dialog shown during export (closes when done)."""
+        progress = QProgressDialog(
+            self.get_str('exportProgressTitle'),
+            self.get_str('cancel'),
+            0,
+            max(1, int(total)),
+            self,
+        )
+        progress.setWindowTitle(self.get_str('exportProgressTitle'))
+        try:
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+        except Exception:
+            progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.setValue(0)
+        progress.show()
+        QApplication.processEvents()
+        return progress
+
+    def _update_export_progress(self, progress, index, total, filename=''):
+        """Update export progress label/value and keep UI responsive."""
+        if progress is None:
+            return False
+        if progress.wasCanceled():
+            return False
+        label = self.get_str('exporting').format(index, total)
+        if filename:
+            label = f'{label}\n{filename}'
+        progress.setLabelText(label)
+        progress.setValue(min(index, total))
+        QApplication.processEvents()
+        return not progress.wasCanceled()
+
+    def _export_yolo_pose_dataset(self, export_dir, anno_dir, annotation_files, copy_images=True):
+        """Export annotations as Ultralytics YOLO-Pose dataset (train/ + data.yaml)."""
+        if not self.current_project or not self.current_project.is_pose_task():
+            # Infer from files / ask defaults
+            kpt_shape = [3, 3]
+            keypoint_names = ['kpt0', 'kpt1', 'kpt2']
+            flip_idx = [0, 1, 2]
+            skeleton = [[0, 1], [1, 2]]
+            class_list = list(self.label_hist) if self.label_hist else ['object']
+            if self.current_project:
+                class_list = list(self.current_project.labels) or class_list
+                if self.current_project.kpt_shape and self.current_project.kpt_shape[0]:
+                    kpt_shape = list(self.current_project.kpt_shape)
+                    keypoint_names = list(self.current_project.keypoint_names) or [
+                        f'kpt{i}' for i in range(kpt_shape[0])
+                    ]
+                    flip_idx = list(self.current_project.flip_idx or range(kpt_shape[0]))
+                    skeleton = [list(e) for e in (self.current_project.skeleton or [])]
+        else:
+            kpt_shape = list(self.current_project.kpt_shape)
+            keypoint_names = list(self.current_project.keypoint_names)
+            flip_idx = list(self.current_project.flip_idx)
+            skeleton = [list(e) for e in self.current_project.skeleton]
+            class_list = list(self.current_project.labels)
+
+        files = [p for p in annotation_files if not p.endswith('classes.txt')]
+        total = len(files)
+        progress = self._make_export_progress_dialog(total)
+        cancelled = False
+        items = []
+        skipped_non_pose = 0
+        try:
+            for idx, anno_path in enumerate(files, 1):
+                if not self._update_export_progress(
+                    progress, idx, total, os.path.basename(anno_path)
+                ):
+                    cancelled = True
+                    break
+                item = self._annotation_file_to_pose_item(anno_path)
+                if item and item.get('annotations') is not None:
+                    # Pad keypoints to K
+                    k = int(kpt_shape[0])
+                    for ann in item['annotations']:
+                        kpts = list(ann.get('keypoints') or [])
+                        while len(kpts) < k:
+                            kpts.append([0, 0, 0])
+                        ann['keypoints'] = kpts[:k]
+                    items.append(item)
+                else:
+                    skipped_non_pose += 1
+
+            if cancelled:
+                progress.close()
+                QMessageBox.information(
+                    self, self.get_str('exportProgressTitle'), self.get_str('exportCancelled')
+                )
+                return
+
+            if not items:
+                progress.close()
+                QMessageBox.warning(
+                    self, self.get_str('warningTitle'), self.get_str('exportYoloPoseNoItems'))
+                return
+
+            progress.setLabelText(self.get_str('exportProgressWriting'))
+            progress.setRange(0, 0)  # busy indicator while writing dataset
+            QApplication.processEvents()
+
+            yaml_path = export_yolo_pose_dataset(
+                items,
+                export_dir,
+                class_list=class_list,
+                kpt_shape=kpt_shape,
+                flip_idx=flip_idx,
+                skeleton=skeleton,
+                split='train',
+                copy_images=copy_images,
+            )
+            progress.close()
+            lines = [
+                self.get_str('exportResultPoseOk'),
+                '',
+                f'{self.get_str("exportFormat")}: {self.get_str("exportFormatYoloPose")}',
+                self.get_str('successfullyExported').format(len(items)),
+            ]
+            if skipped_non_pose:
+                lines.append(self.get_str('exportResultPoseSkipped').format(skipped_non_pose))
+            lines.extend([
+                '',
+                self.get_str('exportResultLayoutPose'),
+                f'{self.get_str("exportLocation")}:',
+                export_dir,
+                '',
+                self.get_str('exportResultPoseTrainHint').format(yaml_path),
+            ])
+            self._show_export_result_dialog(
+                self.get_str('exportComplete'), lines, folder_path=export_dir
+            )
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(
+                self, self.get_str('errorTitle'),
+                self.get_str('exportYoloPoseFailed').format(e))
+            import traceback
+            traceback.print_exc()
+        finally:
+            if progress is not None:
+                progress.close()
+
     def export_annotations_dialog(self, _value=False):
         """Export all annotations and corresponding images to a specified directory
         
         This function exports:
         - Annotated images (only those with annotations)
         - Annotation files in selected format
-        - Does NOT include project files (.labelcraft)
+        - Does NOT include project files (.lbc / .labelcraft)
         """
         
         # Check if there are any annotations to export
@@ -4686,6 +5602,8 @@ class MainWindow(QMainWindow, WindowMixin):
         anno_dir = None
         if self.current_project and self.current_project.annotation_dir:
             anno_dir = os.path.join(self.current_project.annotation_dir, 'annotations')
+            if not os.path.exists(anno_dir):
+                anno_dir = self.current_project.annotation_dir
         elif self.default_save_dir:
             anno_dir = self.default_save_dir
         
@@ -4705,10 +5623,11 @@ class MainWindow(QMainWindow, WindowMixin):
         annotation_files = [f for f in annotation_files if not f.endswith('classes.txt')]
         
         if not annotation_files:
-            QMessageBox.warning(self, '警告', 
-                '没有找到已保存的标注文件。\n\n'
-                f'检查目录: {anno_dir}\n\n'
-                '请先标注并保存至少一张图像，然后再导出。')
+            QMessageBox.warning(
+                self, self.get_str('warningTitle'),
+                self.get_str('noAnnotationFiles') + '\n\n'
+                + f'{self.get_str("checkDir")} {anno_dir}\n\n'
+                + self.get_str('pleaseAnnotateFirst'))
             return
         
         # Create format selection dialog
@@ -4724,15 +5643,19 @@ class MainWindow(QMainWindow, WindowMixin):
         format_group = QGroupBox(self.get_str('formatSelection'))
         format_layout = QVBoxLayout()
         
-        format_voc = QRadioButton('PASCAL VOC (XML)')
-        format_yolo = QRadioButton('YOLO (TXT)')
-        format_createml = QRadioButton('CreateML (JSON)')
-        format_coco = QRadioButton('COCO (JSON)')
-        format_csv = QRadioButton('CSV')
-        
-        # Set default based on current format
-        if self.label_file_format == LabelFileFormat.LABELCRAFT_JSON:
-            format_createml.setChecked(True)  # Default to CreateML for JSON projects
+        format_json = QRadioButton(self.get_str('exportFormatLabelCraftJSON'))
+        format_voc = QRadioButton(self.get_str('exportFormatVOC'))
+        format_yolo = QRadioButton(self.get_str('exportFormatYoloDetect'))
+        format_yolo_pose = QRadioButton(self.get_str('exportFormatYoloPose'))
+        format_createml = QRadioButton(self.get_str('exportFormatCreateML'))
+        format_coco = QRadioButton(self.get_str('exportFormatCOCO'))
+        format_csv = QRadioButton(self.get_str('exportFormatCSV'))
+
+        # Defaults: pose task → YOLO Pose; else YOLO Detect (AABB) for JSON projects
+        if self.current_project and self.current_project.is_pose_task():
+            format_yolo_pose.setChecked(True)
+        elif self.label_file_format == LabelFileFormat.LABELCRAFT_JSON:
+            format_yolo.setChecked(True)
         elif self.label_file_format == LabelFileFormat.PASCAL_VOC:
             format_voc.setChecked(True)
         elif self.label_file_format == LabelFileFormat.YOLO:
@@ -4744,15 +5667,22 @@ class MainWindow(QMainWindow, WindowMixin):
         elif self.label_file_format == LabelFileFormat.CSV:
             format_csv.setChecked(True)
         else:
-            format_voc.setChecked(True)
-        
-        format_layout.addWidget(format_voc)
+            format_yolo.setChecked(True)
+
+        format_layout.addWidget(format_json)
         format_layout.addWidget(format_yolo)
+        format_layout.addWidget(format_yolo_pose)
+        format_layout.addWidget(format_voc)
         format_layout.addWidget(format_createml)
         format_layout.addWidget(format_coco)
         format_layout.addWidget(format_csv)
         format_group.setLayout(format_layout)
         main_layout.addWidget(format_group)
+
+        tip_label = QLabel(self.get_str('exportFormatTip'))
+        tip_label.setWordWrap(True)
+        tip_label.setStyleSheet('color: palette(mid); padding: 4px 8px;')
+        main_layout.addWidget(tip_label)
         
         # Options group
         options_group = QGroupBox(self.get_str('exportOptions'))
@@ -4801,8 +5731,12 @@ class MainWindow(QMainWindow, WindowMixin):
         # Connect buttons
         selected_format = [None]
         def on_ok():
-            if format_voc.isChecked():
+            if format_json.isChecked():
+                selected_format[0] = LabelFileFormat.LABELCRAFT_JSON
+            elif format_voc.isChecked():
                 selected_format[0] = LabelFileFormat.PASCAL_VOC
+            elif format_yolo_pose.isChecked():
+                selected_format[0] = 'YOLO_POSE'
             elif format_yolo.isChecked():
                 selected_format[0] = LabelFileFormat.YOLO
             elif format_createml.isChecked():
@@ -4818,6 +5752,41 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Show dialog
         if dialog.exec() != QDialog.Accepted or selected_format[0] is None:
+            return
+
+        # Soft warnings for task / format mismatch
+        is_pose_proj = bool(self.current_project and self.current_project.is_pose_task())
+        if selected_format[0] == LabelFileFormat.YOLO and is_pose_proj:
+            reply = QMessageBox.question(
+                self,
+                self.get_str('warningTitle'),
+                self.get_str('exportYoloDetectStripKptsWarn'),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        if selected_format[0] == 'YOLO_POSE' and not is_pose_proj:
+            reply = QMessageBox.question(
+                self,
+                self.get_str('warningTitle'),
+                self.get_str('exportYoloPoseOnDetectWarn'),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        if selected_format[0] == 'YOLO_POSE':
+            export_dir = QFileDialog.getExistingDirectory(
+                self,
+                self.get_str('selectYoloPoseExportDir'),
+                self.last_open_dir if self.last_open_dir else '.',
+                QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+            )
+            if export_dir:
+                self._export_yolo_pose_dataset(export_dir, anno_dir, annotation_files,
+                                              copy_images=export_images_check.isChecked())
             return
         
         # Open directory selection dialog
@@ -4835,7 +5804,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Create subdirectories for export
         import shutil
-        # For YOLO format, use standard directory structure: images/ and labels/
+        # YOLO Detect / LabelCraft JSON keep images+labels (or annotations)
         if selected_format[0] == LabelFileFormat.YOLO:
             dest_images_dir = os.path.join(export_dir, 'images')
             dest_annotations_dir = os.path.join(export_dir, 'labels')
@@ -4851,6 +5820,8 @@ class MainWindow(QMainWindow, WindowMixin):
             output_ext = '.xml'
         elif selected_format[0] == LabelFileFormat.YOLO:
             output_ext = '.txt'
+        elif selected_format[0] == LabelFileFormat.LABELCRAFT_JSON:
+            output_ext = '.json'
         elif selected_format[0] == LabelFileFormat.CREATE_ML:
             output_ext = '.json'
         elif selected_format[0] == LabelFileFormat.COCO:
@@ -4922,20 +5893,25 @@ class MainWindow(QMainWindow, WindowMixin):
                 reply = QMessageBox.warning(
                     self,
                     self.get_str('warningTitle'),
-                    f'{self.get_str("exportNoLabelsWarning")}\n\n'
-                    f'Project has no defined labels. Export to {selected_format[0].name} format requires labels.\n\n'
-                    f'Options:\n'
-                    f'1. Add labels to project first (recommended)\n'
-                    f'2. Continue with empty labels (annotations will use numeric IDs)',
+                    self.get_str('exportNoLabelsOptions').format(selected_format[0].name),
                     QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok,
                     QMessageBox.StandardButton.Cancel
                 )
                 if reply == QMessageBox.StandardButton.Cancel:
                     return
         
+        total_files = len(annotation_files)
+        progress = self._make_export_progress_dialog(total_files)
+        cancelled = False
         try:
             # Iterate through all annotation files
-            for anno_file_path in annotation_files:
+            for file_idx, anno_file_path in enumerate(annotation_files, 1):
+                if not self._update_export_progress(
+                    progress, file_idx, total_files, os.path.basename(anno_file_path)
+                ):
+                    cancelled = True
+                    break
+
                 if not os.path.exists(anno_file_path):
                     continue
                 
@@ -5059,40 +6035,32 @@ class MainWindow(QMainWindow, WindowMixin):
                         traceback.print_exc()
                         error_count += 1
                         continue
-                    
-                    # Update progress
-                    if exported_count % 10 == 0:
-                        self.statusBar().showMessage(f'正在导出: {exported_count} / {len(annotation_files)}')
-                        QApplication.processEvents()
                         
                 except Exception as e:
                     print(f"Error exporting {img_name}: {e}")
                     import traceback
                     traceback.print_exc()
                     error_count += 1
-            
-            # Show result
-            result_msg = f'{self.get_str("exportComplete")}\n\n'
-            result_msg += f'{self.get_str("successfullyExported").format(exported_count)}\n'
-            if skipped_count > 0:
-                result_msg += f'⊘ Skipped (no matching labels): {skipped_count}\n'
-            if error_count > 0:
-                result_msg += f'{self.get_str("errors").format(error_count)}\n'
-            result_msg += f'\n{self.get_str("exportFormat")}: {selected_format[0].name}\n'
-            result_msg += f'{self.get_str("exportLocation")}: {export_dir}'
-            
-            # Add warning if many files were skipped
-            if skipped_count > 0 and exported_count == 0:
-                result_msg += '\n\n⚠️ Warning: All files were skipped!\n'
-                result_msg += 'Please check that your project labels match the annotation labels.'
-            elif skipped_count > 0:
-                result_msg += f'\n\n💡 Tip: {skipped_count} file(s) were skipped because their labels are not in the project label list.'
-            
-            QMessageBox.information(self, self.get_str('exportComplete'), result_msg)
-            
-            print(f"Export completed: {exported_count} files exported to {export_dir}")
-            
-            # Generate format-specific configuration files
+
+            if cancelled:
+                progress.close()
+                self._show_export_result_dialog(
+                    self.get_str('exportProgressTitle'),
+                    [
+                        self.get_str('exportResultCancelledPartial').format(exported_count),
+                        '',
+                        f'{self.get_str("exportLocation")}:',
+                        export_dir,
+                    ],
+                    folder_path=export_dir if exported_count else None,
+                )
+                return
+
+            # Close progress before post-processing / result dialog
+            progress.setValue(total_files)
+            progress.close()
+
+            # Generate format-specific files before showing result
             if selected_format[0] == LabelFileFormat.YOLO and exported_count > 0:
                 try:
                     self._generate_yolo_data_yaml(export_dir, classes_list)
@@ -5103,12 +6071,44 @@ class MainWindow(QMainWindow, WindowMixin):
                     self._merge_json_annotations(dest_annotations_dir, output_format_str, classes_list)
                 except Exception as merge_error:
                     print(f"Warning: Failed to merge JSON annotations: {merge_error}")
+
+            format_name = self._export_format_display_name(selected_format[0])
+            layout_tip = (
+                self.get_str('exportResultLayoutYolo')
+                if selected_format[0] == LabelFileFormat.YOLO
+                else self.get_str('exportResultLayoutDefault')
+            )
+            lines = [
+                f'{self.get_str("exportFormat")}: {format_name}',
+                self.get_str('successfullyExported').format(exported_count),
+            ]
+            if skipped_count > 0:
+                lines.append(self.get_str('exportSkippedCount').format(skipped_count))
+            if error_count > 0:
+                lines.append(self.get_str('errors').format(error_count))
+            lines.extend([
+                '',
+                layout_tip,
+                f'{self.get_str("exportLocation")}:',
+                export_dir,
+            ])
+            if skipped_count > 0 and exported_count == 0:
+                lines.extend(['', self.get_str('exportResultAllSkippedWarn')])
+            elif skipped_count > 0:
+                lines.extend(['', self.get_str('exportResultSkippedTip')])
+
+            self._show_export_result_dialog(
+                self.get_str('exportComplete'), lines, folder_path=export_dir
+            )
+            print(f"Export completed: {exported_count} files exported to {export_dir}")
             
         except Exception as e:
             QMessageBox.critical(self, self.get_str('errorTitle'), 
                 f'{self.get_str("exportFailed")}\n\n{str(e)}')
             import traceback
             traceback.print_exc()
+        finally:
+            progress.close()
     
     def _generate_yolo_data_yaml(self, export_dir, classes_list):
         """Generate data.yaml file for YOLO format export
@@ -5331,8 +6331,8 @@ def get_main_app(argv=None):
         os.environ.setdefault('QT_MAC_WANTS_LAYER', '1')
 
     app = QApplication(argv)
-    app.setApplicationName(__appname__)
-    app.setWindowIcon(new_icon("app"))
+    # Identity + multi-size icon for Windows/Linux taskbars
+    app_icon_obj = configure_app_identity(app, __appname__)
     
     # Apply system theme (light/dark mode)
     # This will automatically follow the system's theme preference
@@ -5389,6 +6389,7 @@ def get_main_app(argv=None):
     win = MainWindow(args.image_dir,
                      args.class_file,
                      args.save_dir)
+    win.setWindowIcon(app_icon_obj)
     
     # Process events before showing to ensure proper initialization
     app.processEvents()
