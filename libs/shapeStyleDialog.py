@@ -146,7 +146,7 @@ class ShapeStyleDialog(QDialog):
         self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
         opacity_row.addWidget(self.opacity_slider, 1)
         opacity_row.addWidget(self.opacity_label)
-        form.addRow(self._tr('shapeStyleOpacity', '填充透明度'), opacity_row)
+        form.addRow(self._tr('shapeStyleOpacity', '填充不透明度'), opacity_row)
 
         root.addWidget(form_box)
 

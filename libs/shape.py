@@ -14,7 +14,6 @@ DEFAULT_SELECT_LINE_COLOR = QColor(255, 255, 255)
 # Light selection tint — visible box, still see image underneath
 DEFAULT_SELECT_FILL_COLOR = QColor(0, 160, 255, 32)
 POSE_SELECT_FILL_ALPHA = 80
-FILL_ALPHA_MAX = 36
 # BBox corner handles: cyan squares (distinct from pose keypoints)
 DEFAULT_VERTEX_FILL_COLOR = QColor(0, 200, 255, 255)
 DEFAULT_HVERTEX_FILL_COLOR = QColor(255, 80, 80, 255)
@@ -267,10 +266,10 @@ class Shape(object):
             # Honor per-shape fill_color / alpha from 选取样式 dialog
             if self.fill:
                 base = self.fill_color if self.fill_color else DEFAULT_FILL_COLOR
-                alpha = int(base.alpha()) if base.alpha() > 0 else POSE_SELECT_FILL_ALPHA
-                # Soft cap only for accidentally opaque (255) colors from old data
-                if alpha >= 250:
-                    alpha = FILL_ALPHA_MAX
+                if base.alpha() > 0:
+                    alpha = int(base.alpha())
+                else:
+                    alpha = POSE_SELECT_FILL_ALPHA
                 color = QColor(base.red(), base.green(), base.blue(), alpha)
                 painter.fillPath(line_path, color)
 

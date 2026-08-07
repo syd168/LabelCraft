@@ -548,7 +548,7 @@
   "shapeStyleLineColor": "线条颜色",
   "shapeStyleLineWidth": "线条粗细",
   "shapeStyleFillColor": "背景填充色",
-  "shapeStyleOpacity": "填充透明度",
+  "shapeStyleOpacity": "填充不透明度",
   "shapeStylePreview": "预览",
   "shapeStyleTip": "默认只改当前选中框。各框样式可不同；勾选下方选项可统一本图全部标注。",
   "chooseColor": "选择颜色…",

@@ -1,11 +1,11 @@
 # LabelCraft - 智能图像标注工具
 
-> **版本 3.0.1** — 面向检测与姿态的项目化标注工具，基于 [labelImg](https://github.com/tzutalin/labelImg)
+> **版本 3.0.2** — 面向检测与姿态的项目化标注工具，基于 [labelImg](https://github.com/tzutalin/labelImg)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
-[![Version](https://img.shields.io/badge/version-3.0.1-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Version](https://img.shields.io/badge/version-3.0.2-orange.svg)](https://github.com/syd168/LabelCraft/releases)
 [![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
 [![PyPI](https://img.shields.io/pypi/v/labelcraft.svg)](https://pypi.org/project/LabelCraft/)
 
@@ -95,6 +95,10 @@ LabelCraft/
 - 语言包：`libs/locales/*.json`
 - 修改 `resources.qrc` 后重新编译：  
   `pyside6-rcc -o libs/resources.py resources.qrc`
+
+## 更新说明（3.0.2）
+
+- 修复选框样式：填充不透明度 100% 不再被压成近似透明
 
 ## 更新说明（3.0.1）
 
