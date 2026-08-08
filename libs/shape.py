@@ -231,50 +231,55 @@ class Shape(object):
             painter.drawPath(vertex_path)
             painter.fillPath(vertex_path, corner_color)
 
-            # Draw text at the top-left with outline for better visibility
-            if self.paint_label:
-                min_x = sys.maxsize
-                min_y = sys.maxsize
-                min_y_label = int(1.25 * self.label_font_size)
-                for point in self.points:
-                    min_x = min(min_x, point.x())
-                    min_y = min(min_y, point.y())
-                if min_x != sys.maxsize and min_y != sys.maxsize:
-                    font = QFont()
-                    font.setPointSize(self.label_font_size)
-                    font.setBold(True)
-                    painter.setFont(font)
-                    if self.label is None:
-                        self.label = ""
-                    if min_y < min_y_label:
-                        min_y += min_y_label
-                    
-                    # Draw text with white outline for better visibility
-                    text_path = QPainterPath()
-                    text_path.addText(int(min_x), int(min_y), font, self.label)
-                    
-                    # Draw outline (stroke) first - white color
-                    outline_pen = QPen(QColor(255, 255, 255, 200))
-                    outline_pen.setWidth(2)
-                    outline_pen.setJoinStyle(Qt.RoundJoin)
-                    painter.setPen(outline_pen)
-                    painter.drawPath(text_path)
-                    
-                    # Draw fill - black color
-                    painter.fillPath(text_path, QColor(0, 0, 0, 200))
-
-            # Honor per-shape fill_color / alpha from 选取样式 dialog
+            # Honor per-shape fill_color / alpha from 选取样式 dialog.
+            # Draw fill BEFORE label text — selected boxes always fill, and
+            # painting text first made Display Labels look broken on selection.
             if self.fill:
                 base = self.fill_color if self.fill_color else DEFAULT_FILL_COLOR
                 if base.alpha() > 0:
                     alpha = int(base.alpha())
                 else:
                     alpha = POSE_SELECT_FILL_ALPHA
-                color = QColor(base.red(), base.green(), base.blue(), alpha)
-                painter.fillPath(line_path, color)
+                fill_color = QColor(base.red(), base.green(), base.blue(), alpha)
+                painter.fillPath(line_path, fill_color)
+
+            # Label text on top (must be after fill so selection highlight
+            # does not cover "Display Labels" text).
+            if self.paint_label:
+                self._paint_label_text(painter)
 
         if self.keypoints:
             self.paint_keypoints(painter)
+
+    def _paint_label_text(self, painter):
+        """Draw class name at the top-left of the shape (above fill)."""
+        min_x = sys.maxsize
+        min_y = sys.maxsize
+        font_px = max(8, int(self.label_font_size))
+        min_y_label = int(1.25 * font_px)
+        for point in self.points:
+            min_x = min(min_x, point.x())
+            min_y = min(min_y, point.y())
+        if min_x == sys.maxsize or min_y == sys.maxsize:
+            return
+
+        font = QFont()
+        font.setPointSize(font_px)
+        font.setBold(True)
+        painter.setFont(font)
+        label = self.label if self.label is not None else ''
+        if min_y < min_y_label:
+            min_y += min_y_label
+
+        text_path = QPainterPath()
+        text_path.addText(int(min_x), int(min_y), font, label)
+
+        outline_pen = QPen(QColor(255, 255, 255, 220))
+        outline_pen.setWidth(max(2, int(round(2.0 / max(self.scale, 0.05)))))
+        outline_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(outline_pen)
+        painter.drawPath(text_path)
+        painter.fillPath(text_path, QColor(0, 0, 0, 220))
 
     def paint_keypoints(self, painter):
         """Draw skeleton edges and ordered keypoint markers (circles + #index)."""

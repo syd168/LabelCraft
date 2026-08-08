@@ -158,7 +158,7 @@ class ShapeStyleDialog(QDialog):
             'shapeStyleTip',
             '默认只改当前选中框。各框样式可不同；勾选下方选项可统一本图全部标注。'))
         tip.setWordWrap(True)
-        tip.setStyleSheet('color: gray;')
+        tip.setStyleSheet('color: palette(placeholder-text);')
         prev_layout.addWidget(tip)
         root.addWidget(prev_box)
 

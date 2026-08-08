@@ -1,11 +1,11 @@
 # LabelCraft - Intelligent Image Annotation Tool
 
-> **Version 3.0.2** — Project-first annotation for detection & pose, based on [labelImg](https://github.com/tzutalin/labelImg)
+> **Version 3.0.3** — Project-first annotation for detection & pose, based on [labelImg](https://github.com/tzutalin/labelImg)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
-[![Version](https://img.shields.io/badge/version-3.0.2-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Version](https://img.shields.io/badge/version-3.0.3-orange.svg)](https://github.com/syd168/LabelCraft/releases)
 [![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
 [![PyPI](https://img.shields.io/pypi/v/labelcraft.svg)](https://pypi.org/project/LabelCraft/)
 
@@ -96,17 +96,11 @@ LabelCraft/
 - After editing `resources.qrc`, recompile:  
   `pyside6-rcc -o libs/resources.py resources.qrc`
 
-## Changelog (3.0.2)
+## Changelog
 
-- Fix shape-style fill opacity: 100% is fully opaque again (removed accidental alpha clamp)
+Latest highlights (**3.0.3**): Preferences (`Ctrl+,`), theme/language persistence, JSON settings.
 
-## Changelog (3.0.1)
-
-- PyPI description: use absolute screenshot URL so the image renders on pypi.org
-
-## Changelog (3.0.0)
-
-See [RELEASE_NOTES_v3.0.0.md](RELEASE_NOTES_v3.0.0.md).
+Full history: [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

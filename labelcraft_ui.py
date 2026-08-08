@@ -52,7 +52,8 @@ from libs.project import (
     Project, RecentProjectsManager, PROJECT_EXT, project_file_filter,
 )
 from libs.newProjectDialog import NewProjectDialog
-from libs.theme_manager import apply_system_theme
+from libs.theme_manager import apply_theme, normalize_theme
+from libs.preferencesDialog import PreferencesDialog
 from libs import __version__
 
 __appname__ = 'LabelCraft'
@@ -102,7 +103,15 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Initialize modern I18n engine (with dynamic switching support)
         self.i18n = I18nEngine()
-        
+        # Restore saved language before wiring the signal (avoids a startup UI churn)
+        saved_lang = settings.get(SETTING_LANGUAGE)
+        if saved_lang:
+            lang = str(saved_lang).replace('_', '-')
+            if lang in self.i18n.translations and lang != self.i18n.current_language:
+                self.i18n.set_language(lang)
+        self.app_theme = normalize_theme(settings.get(SETTING_THEME, THEME_SYSTEM))
+        self.use_fixed_style = bool(settings.get(SETTING_FIXED_STYLE, False))
+
         # Connect language change signal for dynamic UI updates
         self.i18n.language_changed.connect(self.on_language_changed)
 
@@ -563,16 +572,21 @@ class MainWindow(QMainWindow, WindowMixin):
                                None, None, self.get_str('advancedModeDetail'),
                                checkable=True)
 
-        # Combined show/hide labels toggle
-        toggle_labels = action(self.get_str('showAllBox'), self.toggle_all_labels,
+        # Show/hide annotation boxes — checkable (menu ✓ on the left; toolbar pressed)
+        toggle_labels = action(self.get_str('showAllBox'), None,
                               'Ctrl+H', 'show_boxes', self.get_str('showAllBoxDetail'),
                               checkable=True, enabled=False)
-        toggle_labels.setChecked(True)  # Default to showing all labels
+        toggle_labels.setChecked(True)  # Default: boxes visible
+        # Icon would replace the menu check column; keep icon on the toolbar only
+        toggle_labels.setIconVisibleInMenu(False)
+        toggle_labels.toggled.connect(self.toggle_all_labels)
 
         help_default = action(self.get_str('tutorialDefault'), self.show_default_tutorial_dialog, None, 'help',
                               self.get_str('tutorialDetail'))
         show_info = action(self.get_str('info'), self.show_info_dialog, None, 'help', self.get_str('info'))
         self.show_shortcut = action(self.get_str('shortcut'), self.show_shortcuts_dialog, None, 'help', self.get_str('shortcut'))
+        preferences = action(self.get_str('preferences'), self.open_preferences_dialog,
+                             'Ctrl+,', None, self.get_str('preferencesDetail'))
 
         # Create zoom widget with slider and label
         zoom_widget_container = self.zoom_widget.create_widget_with_label()
@@ -640,6 +654,7 @@ class MainWindow(QMainWindow, WindowMixin):
                              enabled=False)
 
         labels = self.dock.toggleViewAction()
+        labels.setCheckable(True)
         labels.setText(self.get_str('showHide'))
         labels.setShortcut('Ctrl+Shift+L')
 
@@ -687,7 +702,7 @@ class MainWindow(QMainWindow, WindowMixin):
                               beginner=(), advanced=(),
                               # setVerified/setUnverified live on completed-list context menu
                               editMenu=(verify, verify_all, filter_unverified, None,
-                                        undo, edit, copy, delete),
+                                        undo, edit, copy, delete, None, preferences),
                               beginnerContext=(create, create_pose, create_polygon,
                                                create_ellipse, create_circle, edit, copy, delete),
                               advancedContext=(create_mode, create_pose_mode, create_polygon_mode,
@@ -708,8 +723,9 @@ class MainWindow(QMainWindow, WindowMixin):
                               labels=labels, drawSquares=self.draw_squares_option,
                               # Project management actions
                               newProject=new_project, openProject=open_project, editProject=edit_project, saveProject=save_project, closeProject=close_project,
-                              # Help menu actions
-                              tutorialDefault=help_default, showInfo=show_info)
+                              # Help / Preferences
+                              tutorialDefault=help_default, showInfo=show_info,
+                              preferences=preferences)
 
         self.menus = Struct(
             file=self.menu(self.get_str('menu_file')),
@@ -737,7 +753,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.display_label_option.setShortcut("Ctrl+Shift+P")
         self.display_label_option.setCheckable(True)
         self.display_label_option.setChecked(settings.get(SETTING_PAINT_LABEL, False))
-        self.display_label_option.triggered.connect(self.toggle_paint_labels_option)
+        self.display_label_option.toggled.connect(self.toggle_paint_labels_option)
 
         # Language menu actions
         lang_action_group = QActionGroup(self)
@@ -773,23 +789,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.lang_fr.setActionGroup(lang_action_group)
         self.lang_fr.triggered.connect(lambda: self.change_language('fr-FR'))
 
-        # Set current language based on i18n engine
-        current_locale = self.i18n.current_language
-        if current_locale:
-            if 'zh-CN' in current_locale or 'zh_CN' in current_locale:
-                self.lang_zh_cn.setChecked(True)
-            elif 'zh-TW' in current_locale or 'zh_TW' in current_locale:
-                self.lang_zh_tw.setChecked(True)
-            elif 'ja-JP' in current_locale or 'ja_JP' in current_locale:
-                self.lang_ja.setChecked(True)
-            elif 'de-DE' in current_locale or 'de_DE' in current_locale:
-                self.lang_de.setChecked(True)
-            elif 'fr-FR' in current_locale or 'fr_FR' in current_locale:
-                self.lang_fr.setChecked(True)
-            else:
-                self.lang_en.setChecked(True)
-        else:
-            self.lang_en.setChecked(True)
+        self._sync_language_menu_checks(self.i18n.current_language)
 
         add_actions(self.menus.file,
                     (new_project, open_project, edit_project, save_project, close_project, None,
@@ -812,6 +812,7 @@ class MainWindow(QMainWindow, WindowMixin):
         
         # Setup toolbar toggle action
         toolbar_toggle = self.tools.toggleViewAction()
+        toolbar_toggle.setCheckable(True)
         toolbar_toggle.setText(self.get_str('toolbarToggleText'))
         toolbar_toggle.setShortcut('Ctrl+T')
         
@@ -838,6 +839,7 @@ class MainWindow(QMainWindow, WindowMixin):
             create, create_pose, create_polygon, create_ellipse, create_circle, None,
             undo, copy, delete, None,
             shape_style, None,
+            toggle_labels, None,
             fit_window, fit_width)
 
         self.actions.advanced = (
@@ -899,6 +901,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.restoreState(settings.get(SETTING_WIN_STATE, QByteArray()))
         Shape.line_color = self.line_color = QColor(settings.get(SETTING_LINE_COLOR, DEFAULT_LINE_COLOR))
         Shape.fill_color = self.fill_color = QColor(settings.get(SETTING_FILL_COLOR, DEFAULT_FILL_COLOR))
+        try:
+            lw = float(settings.get(SETTING_LINE_WIDTH, Shape.default_line_width))
+        except (TypeError, ValueError):
+            lw = float(Shape.default_line_width)
+        Shape.default_line_width = max(1.0, min(12.0, lw))
         self.canvas.set_drawing_color(self.line_color)
         # Add chris
         Shape.difficult = self.difficult
@@ -1041,7 +1048,11 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'showInfo'):
             self.actions.showInfo.setText(self.get_str('info'))
             self.actions.showInfo.setToolTip(self.get_str('info'))
-        
+        if hasattr(self.actions, 'preferences'):
+            self.actions.preferences.setText(self.get_str('preferences'))
+            self.actions.preferences.setToolTip(self.get_str('preferencesDetail'))
+        self._sync_language_menu_checks(lang_code)
+
         # Note: ZoomWidget and LightWidget titles are not dynamically updated
         # They would need custom update_title() methods to be added
         # For now, they keep their initial language
@@ -1352,6 +1363,19 @@ class MainWindow(QMainWindow, WindowMixin):
                 border-radius: 4px;
             }}
             QToolButton:hover {{
+                background-color: palette(midlight);
+            }}
+            QToolButton:checked {{
+                background-color: palette(highlight);
+            }}
+            QToolButton:disabled {{
+                /* Keep layout; icon gray comes from QIcon Disabled pixmap */
+                background-color: transparent;
+            }}
+            QToolButton:disabled:hover {{
+                background-color: transparent;
+            }}
+            QToolButton:disabled:checked {{
                 background-color: palette(midlight);
             }}
             QSlider {{
@@ -1753,10 +1777,110 @@ class MainWindow(QMainWindow, WindowMixin):
             self._build_shortcuts_markdown(),
             min_size=(720, 600))
 
+    def _sync_language_menu_checks(self, locale=None):
+        """Keep Language menu radio checks aligned with the active locale."""
+        if not hasattr(self, 'lang_en'):
+            return
+        locale = str(locale or self.i18n.current_language or 'en').replace('_', '-')
+        checks = {
+            'zh-CN': getattr(self, 'lang_zh_cn', None),
+            'zh-TW': getattr(self, 'lang_zh_tw', None),
+            'ja-JP': getattr(self, 'lang_ja', None),
+            'de-DE': getattr(self, 'lang_de', None),
+            'fr-FR': getattr(self, 'lang_fr', None),
+            'en': self.lang_en,
+        }
+        target = checks.get(locale, self.lang_en)
+        if target is not None:
+            target.setChecked(True)
+
+    def _apply_app_theme(self, theme):
+        """Apply theme to the running QApplication and remember preference."""
+        theme = normalize_theme(theme)
+        self.app_theme = theme
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, theme)
+
+    def open_preferences_dialog(self):
+        """Edit → Preferences… (language, theme, annotation, default style)."""
+        line_c = self.line_color if self.line_color else DEFAULT_LINE_COLOR
+        fill_c = self.fill_color if self.fill_color else DEFAULT_FILL_COLOR
+        dlg = PreferencesDialog(
+            parent=self,
+            languages=self.i18n.get_available_languages(),
+            values={
+                'language': self.i18n.current_language,
+                'theme': getattr(self, 'app_theme', THEME_SYSTEM),
+                'auto_save': self.auto_saving.isChecked(),
+                'single_class': self.single_class_mode.isChecked(),
+                'paint_label': self.display_label_option.isChecked(),
+                'draw_square': self.draw_squares_option.isChecked(),
+                'fixed_style': getattr(self, 'use_fixed_style', False),
+                'line_color': QColor(line_c),
+                'fill_color': QColor(fill_c),
+                'line_width': float(Shape.default_line_width),
+            },
+            tr=lambda key, default=None: self.tr(key, default=default),
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        vals = dlg.result_values()
+        new_lang = vals.get('language')
+        new_theme = vals.get('theme')
+
+        if new_lang:
+            self.change_language(new_lang)
+        if new_theme != getattr(self, 'app_theme', THEME_SYSTEM):
+            self._apply_app_theme(new_theme)
+
+        self.auto_saving.setChecked(bool(vals.get('auto_save')))
+        self.single_class_mode.setChecked(bool(vals.get('single_class')))
+
+        paint = bool(vals.get('paint_label'))
+        if paint != self.display_label_option.isChecked():
+            self.display_label_option.setChecked(paint)
+            self.toggle_paint_labels_option()
+        else:
+            self.display_label_option.setChecked(paint)
+
+        square = bool(vals.get('draw_square'))
+        self.draw_squares_option.setChecked(square)
+        self.toggle_draw_square()
+
+        self.use_fixed_style = bool(vals.get('fixed_style'))
+        self.line_color = QColor(vals.get('line_color', DEFAULT_LINE_COLOR))
+        self.fill_color = QColor(vals.get('fill_color', DEFAULT_FILL_COLOR))
+        Shape.line_color = self.line_color
+        Shape.fill_color = self.fill_color
+        try:
+            lw = float(vals.get('line_width', Shape.default_line_width))
+        except (TypeError, ValueError):
+            lw = float(Shape.default_line_width)
+        Shape.default_line_width = max(1.0, min(12.0, lw))
+        self.canvas.set_drawing_color(self.line_color)
+
+        self.settings[SETTING_LANGUAGE] = self.i18n.current_language
+        self.settings[SETTING_THEME] = getattr(self, 'app_theme', THEME_SYSTEM)
+        self.settings[SETTING_AUTO_SAVE] = self.auto_saving.isChecked()
+        self.settings[SETTING_SINGLE_CLASS] = self.single_class_mode.isChecked()
+        self.settings[SETTING_PAINT_LABEL] = self.display_label_option.isChecked()
+        self.settings[SETTING_DRAW_SQUARE] = self.draw_squares_option.isChecked()
+        self.settings[SETTING_FIXED_STYLE] = self.use_fixed_style
+        self.settings[SETTING_LINE_COLOR] = self.line_color
+        self.settings[SETTING_FILL_COLOR] = self.fill_color
+        self.settings[SETTING_LINE_WIDTH] = Shape.default_line_width
+        self.settings.save()
+        self.statusBar().showMessage(self.get_str('preferencesApplied'), 3000)
+
     def change_language(self, locale):
         """Change the application language (uses new i18n engine)"""
         # Use new i18n engine for dynamic switching
         self.i18n.set_language(locale)
+        self.settings[SETTING_LANGUAGE] = self.i18n.current_language
+        self.settings.save()
+        self._sync_language_menu_checks(self.i18n.current_language)
 
         # Update menu titles
         self.menus.file.setTitle(self.get_str('menu_file'))
@@ -2017,6 +2141,10 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'showInfo'):
             self.actions.showInfo.setText(self.get_str('info'))
             self.actions.showInfo.setToolTip(self.get_str('info'))
+
+        if hasattr(self.actions, 'preferences'):
+            self.actions.preferences.setText(self.get_str('preferences'))
+            self.actions.preferences.setToolTip(self.get_str('preferencesDetail'))
         
         if hasattr(self, 'show_shortcut'):
             self.show_shortcut.setText(self.get_str('shortcut'))
@@ -2842,7 +2970,15 @@ class MainWindow(QMainWindow, WindowMixin):
 
             self.prev_label_text = text
             generate_color = generate_color_by_text(text)
-            shape = self.canvas.set_last_label(text, generate_color, generate_color)
+            if getattr(self, 'use_fixed_style', False) and self.line_color and self.fill_color:
+                line_c = QColor(self.line_color)
+                fill_c = QColor(self.fill_color)
+            else:
+                line_c = generate_color
+                fill_c = generate_color
+            shape = self.canvas.set_last_label(text, line_c, fill_c)
+            # Ensure new boxes pick up the preferred default stroke width
+            shape.line_width = float(Shape.default_line_width)
             self.add_label(shape)
 
             # Pose only when user clicked the Pose button (not Rectangle)
@@ -3022,24 +3158,61 @@ class MainWindow(QMainWindow, WindowMixin):
         current_light = self.light_widget.get_light_percentage()
         self.set_light(current_light + increment)
 
-    def toggle_polygons(self, value):
-        for item, shape in self.items_to_shapes.items():
-            item.setCheckState(Qt.CheckState.Checked if value else Qt.CheckState.Unchecked)
+    def _prune_stale_label_maps(self):
+        """Drop label-list mappings whose Qt items were already deleted."""
+        try:
+            from shiboken6 import isValid
+        except Exception:
+            isValid = None
 
-    def toggle_all_labels(self):
-        """Toggle all labels visibility using checkbox state"""
-        # Get the current state of the checkbox
-        show_labels = self.actions.toggleLabels.isChecked()
-        
-        # Update checkbox text based on state
-        if show_labels:
-            self.actions.toggleLabels.setText(self.get_str('showAllBox'))
-            self.actions.toggleLabels.setToolTip(self.get_str('showAllBoxDetail'))
-        else:
-            self.actions.toggleLabels.setText(self.get_str('hideAllBox'))
-            self.actions.toggleLabels.setToolTip(self.get_str('hideAllBoxDetail'))
-        
-        # Toggle all label items
+        stale_items = []
+        for item, shape in list(self.items_to_shapes.items()):
+            dead = False
+            try:
+                if isValid is not None and not isValid(item):
+                    dead = True
+                else:
+                    # Touch a cheap property; deleted C++ wrappers raise RuntimeError
+                    _ = item.checkState()
+            except RuntimeError:
+                dead = True
+            if dead:
+                stale_items.append((item, shape))
+
+        for item, shape in stale_items:
+            self.items_to_shapes.pop(item, None)
+            if shape in self.shapes_to_items:
+                self.shapes_to_items.pop(shape, None)
+
+    def toggle_polygons(self, value):
+        """Show/hide all annotation boxes; never touch deleted list items."""
+        show = bool(value)
+        state = Qt.CheckState.Checked if show else Qt.CheckState.Unchecked
+        self._prune_stale_label_maps()
+
+        # Drive visibility from the live QListWidget — not the possibly-stale dict
+        for i in range(self.label_list.count()):
+            item = self.label_list.item(i)
+            if item is None:
+                continue
+            try:
+                item.setCheckState(state)
+            except RuntimeError:
+                continue
+
+        # Keep canvas in sync even if itemChanged did not fire
+        for shape in getattr(self.canvas, 'shapes', []) or []:
+            self.canvas.visible[shape] = show
+        self.canvas.update()
+
+    def toggle_all_labels(self, checked=None):
+        """Toggle annotation-box visibility; menu ✓ / toolbar pressed = visible."""
+        show_labels = (
+            self.actions.toggleLabels.isChecked()
+            if checked is None else bool(checked))
+        # Stable label — on/off is the checkmark / pressed state, not renaming
+        self.actions.toggleLabels.setText(self.get_str('showAllBox'))
+        self.actions.toggleLabels.setToolTip(self.get_str('showAllBoxDetail'))
         self.toggle_polygons(show_labels)
 
     def load_file(self, file_path=None):
@@ -3288,6 +3461,10 @@ class MainWindow(QMainWindow, WindowMixin):
         settings[SETTING_PAINT_LABEL] = self.display_label_option.isChecked()
         settings[SETTING_DRAW_SQUARE] = self.draw_squares_option.isChecked()
         settings[SETTING_LABEL_FILE_FORMAT] = self.label_file_format
+        settings[SETTING_LANGUAGE] = self.i18n.current_language
+        settings[SETTING_THEME] = getattr(self, 'app_theme', THEME_SYSTEM)
+        settings[SETTING_FIXED_STYLE] = getattr(self, 'use_fixed_style', False)
+        settings[SETTING_LINE_WIDTH] = float(Shape.default_line_width)
         settings.save()
 
     def load_recent(self, filename):
@@ -5135,7 +5312,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.load_shapes([])
         self.canvas.reset_state()
         
-        # Clear label list
+        # Clear label list + mappings (clear() deletes C++ items; maps must go too)
+        self.items_to_shapes.clear()
+        self.shapes_to_items.clear()
         self.label_list.clear()
         
         # Clear file list (completed annotations)
@@ -5327,9 +5506,14 @@ class MainWindow(QMainWindow, WindowMixin):
             self.show_bounding_box_from_annotation_file(prev_file_path)
             self.save_file()
 
-    def toggle_paint_labels_option(self):
+    def toggle_paint_labels_option(self, checked=None):
+        show = self.display_label_option.isChecked() if checked is None else bool(checked)
         for shape in self.canvas.shapes:
-            shape.paint_label = self.display_label_option.isChecked()
+            shape.paint_label = show
+        # Also sync any shapes only present in the side list mapping
+        for shape in getattr(self, 'shapes_to_items', {}) or {}:
+            shape.paint_label = show
+        self.canvas.update()
 
     def toggle_draw_square(self):
         self.canvas.set_drawing_shape_to_square(self.draw_squares_option.isChecked())
@@ -6333,10 +6517,11 @@ def get_main_app(argv=None):
     app = QApplication(argv)
     # Identity + multi-size icon for Windows/Linux taskbars
     app_icon_obj = configure_app_identity(app, __appname__)
-    
-    # Apply system theme (light/dark mode)
-    # This will automatically follow the system's theme preference
-    apply_system_theme(app)
+
+    # Apply saved theme (system / light / dark) before creating the main window
+    boot_settings = Settings()
+    boot_settings.load()
+    apply_theme(app, boot_settings.get(SETTING_THEME, THEME_SYSTEM))
     
     # Tzutalin 201705+: Accept extra arguments to change predefined class file
     argparser = argparse.ArgumentParser(

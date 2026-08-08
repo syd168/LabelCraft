@@ -26,8 +26,48 @@ def filter_platform_argv(argv):
     return filtered
 
 
+def _disabled_icon_pixmap(pix):
+    """Same drawing as enabled, but gray + translucent so unavailable tools read clearly."""
+    if pix is None or pix.isNull():
+        return pix
+    img = pix.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    for y in range(img.height()):
+        for x in range(img.width()):
+            c = img.pixelColor(x, y)
+            a = c.alpha()
+            if a == 0:
+                continue
+            # Luma grayscale, then soften
+            g = int(0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue())
+            img.setPixelColor(x, y, QColor(g, g, g, max(0, int(a * 0.45))))
+    return QPixmap.fromImage(img)
+
+
 def new_icon(icon):
-    return QIcon(':/' + icon)
+    """Load toolbar/menu icon.
+
+    Normal/Active/Selected share one pixmap so hover does not swap artwork.
+    Disabled uses a gray translucent variant so unavailable tools look inactive.
+    """
+    path = ':/' + icon
+    base = QIcon(path)
+    # Prefer a crisp size close to toolbar buttons; fall back to native.
+    pix = base.pixmap(QSize(128, 128))
+    if pix.isNull():
+        pix = base.pixmap(QSize(48, 48))
+    if pix.isNull():
+        return base
+    disabled = _disabled_icon_pixmap(pix)
+    out = QIcon()
+    for mode, p in (
+        (QIcon.Mode.Normal, pix),
+        (QIcon.Mode.Active, pix),
+        (QIcon.Mode.Selected, pix),
+        (QIcon.Mode.Disabled, disabled),
+    ):
+        out.addPixmap(p, mode, QIcon.State.Off)
+        out.addPixmap(p, mode, QIcon.State.On)
+    return out
 
 
 def app_icon_file_path():
