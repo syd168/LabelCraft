@@ -591,6 +591,34 @@ class AnnotationConverter:
             kpt_shape,
             output_path,
         )
+
+    @staticmethod
+    def write_yolo_obb(internal_data, output_path, classes_list):
+        """Write internal format to YOLO-OBB TXT (cls + 4 normalized corners).
+
+        Only annotations with type=='obb' and >=4 points are written.
+        Rectangles / pose / polygons are skipped (use Detect / Pose / Seg).
+        """
+        from libs.yolo_obb_io import annotations_to_obb_txt
+        return annotations_to_obb_txt(
+            internal_data.get('annotations', []),
+            internal_data['image_width'],
+            internal_data['image_height'],
+            classes_list,
+            output_path,
+        )
+
+    @staticmethod
+    def write_yolo_seg(internal_data, output_path, classes_list):
+        """Write internal format to YOLO-Seg TXT (cls + normalized polygon)."""
+        from libs.yolo_seg_io import annotations_to_seg_txt
+        return annotations_to_seg_txt(
+            internal_data.get('annotations', []),
+            internal_data['image_width'],
+            internal_data['image_height'],
+            classes_list,
+            output_path,
+        )
     
     @staticmethod
     def write_createml(internal_data, output_path):
@@ -619,8 +647,16 @@ class AnnotationConverter:
             json.dump(data, f, indent=2, ensure_ascii=False)
     
     @staticmethod
-    def write_coco(internal_data, output_path, categories_list):
-        """Write internal format to COCO JSON"""
+    def write_coco(internal_data, output_path, categories_list, include_segmentation=True):
+        """Write internal format to COCO JSON.
+
+        When ``include_segmentation`` is True and the annotation has a usable
+        polygon (polygon / obb / ellipse / circle), a COCO ``segmentation``
+        field is written. Otherwise only bbox is exported.
+        """
+        from libs.yolo_seg_io import seg_points_from_ann
+        from libs.coco_seg_io import flatten_segmentation, _polygon_area
+
         # Build category map
         cat_map = {name: idx + 1 for idx, name in enumerate(categories_list)}
         
@@ -637,7 +673,10 @@ class AnnotationConverter:
                 'height': internal_data['image_height']
             }],
             'annotations': [],
-            'categories': [{'id': idx + 1, 'name': name} for idx, name in enumerate(categories_list)]
+            'categories': [
+                {'id': idx + 1, 'name': name, 'supercategory': 'none'}
+                for idx, name in enumerate(categories_list)
+            ]
         }
         
         ann_id = 1
@@ -648,14 +687,22 @@ class AnnotationConverter:
                 continue
             
             x, y, w, h = ann['bbox']
-            coco_data['annotations'].append({
+            item = {
                 'id': ann_id,
                 'image_id': 1,
                 'category_id': cat_map[label],
                 'bbox': [x, y, w, h],
                 'area': w * h,
                 'iscrowd': 0
-            })
+            }
+            if include_segmentation:
+                pts = seg_points_from_ann(ann)
+                if pts and len(pts) >= 3:
+                    item['segmentation'] = [flatten_segmentation(pts)]
+                    area = _polygon_area(pts)
+                    if area > 0:
+                        item['area'] = area
+            coco_data['annotations'].append(item)
             ann_id += 1
         
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -720,9 +767,9 @@ class AnnotationConverter:
             ann_type = ann.get('type') or ('pose' if has_kpts else 'rectangle')
             xmin, ymin, xmax, ymax = int(x), int(y), int(x + w), int(y + h)
 
-            # Prefer original vertices (polygon); else AABB 4 corners
+            # Prefer original vertices (polygon / OBB); else AABB 4 corners
             src_pts = ann.get('points') or []
-            if ann_type == 'polygon' and len(src_pts) >= 3:
+            if ann_type in ('polygon', 'obb') and len(src_pts) >= (3 if ann_type == 'polygon' else 4):
                 points = [[int(round(p[0])), int(round(p[1]))] for p in src_pts]
                 xs = [p[0] for p in points]
                 ys = [p[1] for p in points]
@@ -840,6 +887,8 @@ class AnnotationConverter:
         writers = {
             'voc': AnnotationConverter.write_voc,
             'yolo': AnnotationConverter.write_yolo,
+            'yolo_obb': AnnotationConverter.write_yolo_obb,
+            'yolo_seg': AnnotationConverter.write_yolo_seg,
             'createml': AnnotationConverter.write_createml,
             'coco': AnnotationConverter.write_coco,
             'csv': AnnotationConverter.write_csv,
@@ -850,10 +899,10 @@ class AnnotationConverter:
             raise ValueError(f"Unsupported output format: {output_format}")
         
         # For YOLO and COCO, classes_list is required
-        if output_format in ['yolo', 'coco'] and not classes_list:
+        if output_format in ['yolo', 'yolo_obb', 'yolo_seg', 'coco'] and not classes_list:
             raise ValueError(f"classes_list is required for {output_format} format")
         
-        if output_format == 'yolo':
+        if output_format in ('yolo', 'yolo_obb', 'yolo_seg'):
             success = writers[output_format](internal_data, output_path, classes_list)
         elif output_format == 'coco':
             writers[output_format](internal_data, output_path, classes_list)

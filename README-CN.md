@@ -1,11 +1,11 @@
 # LabelCraft - 智能图像标注工具
 
-> **版本 3.0.3** — 面向检测与姿态的项目化标注工具，基于 [labelImg](https://github.com/tzutalin/labelImg)
+> **版本 3.1.0** — 面向检测、姿态、旋转框与分割的项目化标注工具，基于 [labelImg](https://github.com/tzutalin/labelImg)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
-[![Version](https://img.shields.io/badge/version-3.0.3-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Version](https://img.shields.io/badge/version-3.1.0-orange.svg)](https://github.com/syd168/LabelCraft/releases)
 [![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
 [![PyPI](https://img.shields.io/pypi/v/labelcraft.svg)](https://pypi.org/project/LabelCraft/)
 
@@ -98,7 +98,7 @@ LabelCraft/
 
 ## 更新说明
 
-最新（**3.0.3**）：偏好设置（`Ctrl+,`）、语言/主题持久化、JSON 配置存储。
+最新（**3.1.0**）：旋转矩形（OBB）、YOLO OBB / YOLO Seg / COCO Seg 导出、导出对话框优化。
 
 完整历史见 [CHANGELOG.md](CHANGELOG.md)。
 

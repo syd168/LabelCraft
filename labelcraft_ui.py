@@ -43,6 +43,9 @@ from libs.yolo_pose_io import (
     parse_data_yaml,
     find_data_yaml,
 )
+from libs.yolo_obb_io import export_yolo_obb_dataset
+from libs.yolo_seg_io import export_yolo_seg_dataset, seg_points_from_ann
+from libs.coco_seg_io import export_coco_seg_dataset
 from libs.json_io import LabelCraftJSONReader
 from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
@@ -353,18 +356,44 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.editAboutToBegin.connect(self.on_annotation_edit_about_to_begin)
         self.canvas.editGestureFinished.connect(self.on_annotation_edit_gesture_finished)
 
-        # Create central widget with splitter (canvas + pending queue)
+        # Create central widget with splitter (canvas+path bar + pending queue)
         central_splitter = QSplitter(Qt.Orientation.Vertical)
-        
-        # Add canvas scroll area to splitter
-        central_splitter.addWidget(scroll)
-        
+
+        # Canvas column: annotation area + sunken path status strip
+        canvas_column = QWidget()
+        canvas_column_layout = QVBoxLayout(canvas_column)
+        canvas_column_layout.setContentsMargins(0, 0, 0, 0)
+        canvas_column_layout.setSpacing(2)
+        canvas_column_layout.addWidget(scroll, 1)
+
+        self.image_path_bar = QLabel()
+        self.image_path_bar.setObjectName('imagePathBar')
+        self.image_path_bar.setFrameShape(QFrame.Shape.Panel)
+        self.image_path_bar.setFrameShadow(QFrame.Shadow.Sunken)
+        self.image_path_bar.setLineWidth(1)
+        self.image_path_bar.setMargin(4)
+        self.image_path_bar.setMinimumHeight(26)
+        self.image_path_bar.setMaximumHeight(28)
+        # Ignored width: long paths clip instead of widening the window
+        self.image_path_bar.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.image_path_bar.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.image_path_bar.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.image_path_bar.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.image_path_bar.setWordWrap(False)
+        canvas_column_layout.addWidget(self.image_path_bar, 0)
+        self.update_image_path_bar()
+
+        central_splitter.addWidget(canvas_column)
+
         # Create pending images queue section
         pending_widget = QWidget()
         pending_layout = QVBoxLayout()
         pending_layout.setContentsMargins(5, 5, 5, 5)
         pending_layout.setSpacing(5)
-        
+
         # Buttons for pending queue - horizontal layout
         pending_btn_layout = QHBoxLayout()
         pending_btn_layout.setSpacing(5)
@@ -372,27 +401,33 @@ class MainWindow(QMainWindow, WindowMixin):
         self.add_images_btn.clicked.connect(self.add_images_to_pending)
         self.add_folder_btn = QPushButton(self.get_str('addFolder'))
         self.add_folder_btn.clicked.connect(self.add_folder_to_pending)
+        self.sync_unannotated_btn = QPushButton(self.get_str('syncUnannotated'))
+        self.sync_unannotated_btn.setToolTip(self.get_str('syncUnannotatedTip'))
+        self.sync_unannotated_btn.clicked.connect(self.sync_unannotated_to_pending)
         self.clear_pending_btn = QPushButton(self.get_str('clearPending'))
         self.clear_pending_btn.clicked.connect(self.clear_pending_queue)
         pending_btn_layout.addWidget(self.add_images_btn)
         pending_btn_layout.addWidget(self.add_folder_btn)
+        pending_btn_layout.addWidget(self.sync_unannotated_btn)
         pending_btn_layout.addStretch()
         pending_btn_layout.addWidget(self.clear_pending_btn)
         pending_layout.addLayout(pending_btn_layout)
-        
+
         # Pending images list (below buttons)
         self.pending_list_widget = QListWidget()
         self.pending_list_widget.itemDoubleClicked.connect(self.pending_item_double_clicked)
+        self.pending_list_widget.itemSelectionChanged.connect(
+            self.update_delete_image_action)
         pending_layout.addWidget(self.pending_list_widget)
-        
+
         pending_widget.setLayout(pending_layout)
         central_splitter.addWidget(pending_widget)
-        
+
         # Set initial sizes (canvas takes most space)
-        central_splitter.setStretchFactor(0, 1)  # Canvas expands
+        central_splitter.setStretchFactor(0, 1)  # Canvas column expands
         central_splitter.setStretchFactor(1, 0)  # Pending queue fixed
         central_splitter.setSizes([600, 150])  # Initial split
-        
+
         self.setCentralWidget(central_splitter)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self.dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetFloatable)
@@ -431,6 +466,14 @@ class MainWindow(QMainWindow, WindowMixin):
             /* QPushButton font size for consistency */
             QPushButton {
                 font-size: 13px;
+            }
+            /* Sunken path strip between canvas and pending list */
+            QLabel#imagePathBar {
+                font-size: 12px;
+                padding-left: 4px;
+                padding-right: 4px;
+                color: palette(window-text);
+                background-color: palette(button);
             }
         """)
 
@@ -492,7 +535,15 @@ class MainWindow(QMainWindow, WindowMixin):
                              None, 'done', self.get_str('setVerifiedDetail'))
         set_unverified = action(self.get_str('setUnverified'), lambda: self.set_selected_verified(False),
                                None, 'verify', self.get_str('setUnverifiedDetail'))
-        
+        remove_annotation = action(
+            self.get_str('removeAnnotation'),
+            lambda: self.remove_selected_annotations(return_to_pending=False),
+            None, 'delete', self.get_str('removeAnnotationDetail'))
+        remove_anno_to_pending = action(
+            self.get_str('removeAnnoToPending'),
+            lambda: self.remove_selected_annotations(return_to_pending=True),
+            None, 'delete', self.get_str('removeAnnoToPendingDetail'))
+
         # Filter unverified images toggle - now controls showing verification status
         filter_unverified = action(self.get_str('showVerificationStatus'), self.toggle_show_verification_status,
                                   None, 'eye', self.get_str('showVerificationStatusDetail'),
@@ -527,7 +578,7 @@ class MainWindow(QMainWindow, WindowMixin):
                              self.get_str('changeSaveFormat'), enabled=True)
 
         delete_image = action(self.get_str('deleteImg'), self.delete_image, 'Ctrl+Shift+D', 'close',
-                              self.get_str('deleteImgDetail'))
+                              self.get_str('deleteImgDetail'), enabled=False)
 
         reset_all = action(self.get_str('resetAll'), self.reset_all, None, 'resetall', self.get_str('resetAllDetail'))
 
@@ -545,6 +596,8 @@ class MainWindow(QMainWindow, WindowMixin):
                                      'e', 'ellipse', self.get_str('crtEllipseDetail'), enabled=False)
         create_circle_mode = action(self.get_str('crtCircle'), self.set_create_circle_mode,
                                     'c', 'circle', self.get_str('crtCircleDetail'), enabled=False)
+        create_obb_mode = action(self.get_str('crtObb'), self.set_create_obb_mode,
+                                 'r', 'obb', self.get_str('crtObbDetail'), enabled=False)
         edit_mode = action(self.get_str('editBox'), self.set_edit_mode,
                            'Ctrl+J', 'edit', self.get_str('editBoxDetail'), enabled=False)
 
@@ -558,6 +611,8 @@ class MainWindow(QMainWindow, WindowMixin):
                                 'e', 'ellipse', self.get_str('crtEllipseDetail'), enabled=False)
         create_circle = action(self.get_str('crtCircle'), self.create_circle_shape,
                                'c', 'circle', self.get_str('crtCircleDetail'), enabled=False)
+        create_obb = action(self.get_str('crtObb'), self.create_obb_shape,
+                            'r', 'obb', self.get_str('crtObbDetail'), enabled=False)
         delete = action(self.get_str('delBox'), self.delete_selected_shape,
                         'Delete', 'delete', self.get_str('delBoxDetail'), enabled=False)
         copy = action(self.get_str('dupBox'), self.copy_selected_shape,
@@ -652,6 +707,10 @@ class MainWindow(QMainWindow, WindowMixin):
         shape_style = action(self.get_str('shapeStyle'), self.choose_shape_style,
                              icon='shape_style', tip=self.get_str('shapeStyleDetail'),
                              enabled=False)
+        convert_obb = action(self.get_str('convertObbToPoly'),
+                             self.convert_obb_to_polygon,
+                             icon='polygon', tip=self.get_str('convertObbToPolyDetail'),
+                             enabled=False)
 
         labels = self.dock.toggleViewAction()
         labels.setCheckable(True)
@@ -660,14 +719,16 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Label list context menu.
         label_menu = QMenu()
-        add_actions(label_menu, (edit, delete))
+        add_actions(label_menu, (edit, convert_obb, delete))
         self.label_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.label_list.customContextMenuRequested.connect(
             self.pop_label_list_menu)
 
-        # Completed-annotations list: set verified / unverified via context menu.
+        # Completed-annotations list: verify / remove via context menu.
         completed_menu = QMenu()
-        add_actions(completed_menu, (set_verified, set_unverified))
+        add_actions(completed_menu, (
+            set_verified, set_unverified, None,
+            remove_annotation, remove_anno_to_pending))
         self.file_list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.file_list_widget.customContextMenuRequested.connect(
             self.pop_completed_list_menu)
@@ -683,15 +744,17 @@ class MainWindow(QMainWindow, WindowMixin):
                               resetAll=reset_all, deleteImg=delete_image, quit=quit,
                               lineColor=color1, create=create, createPose=create_pose,
                               createPolygon=create_polygon, createEllipse=create_ellipse,
-                              createCircle=create_circle,
+                              createCircle=create_circle, createObb=create_obb,
                               delete=delete, edit=edit, copy=copy,
                               undo=undo,
                               createMode=create_mode, createPoseMode=create_pose_mode,
                               createPolygonMode=create_polygon_mode,
                               createEllipseMode=create_ellipse_mode,
                               createCircleMode=create_circle_mode,
+                              createObbMode=create_obb_mode,
                               editMode=edit_mode, advancedMode=advanced_mode,
                               shapeStyle=shape_style,
+                              convertObb=convert_obb,
                               zoom=zoom, zoomIn=zoom_in, zoomOut=zoom_out, zoomOrg=zoom_org,
                               fitWindow=fit_window, fitWidth=fit_width,
                               zoomActions=zoom_actions,
@@ -702,16 +765,21 @@ class MainWindow(QMainWindow, WindowMixin):
                               beginner=(), advanced=(),
                               # setVerified/setUnverified live on completed-list context menu
                               editMenu=(verify, verify_all, filter_unverified, None,
-                                        undo, edit, copy, delete, None, preferences),
+                                        undo, edit, convert_obb, copy, delete, None, preferences),
                               beginnerContext=(create, create_pose, create_polygon,
-                                               create_ellipse, create_circle, edit, copy, delete),
+                                               create_ellipse, create_circle, create_obb,
+                                               edit, convert_obb, copy, delete),
                               advancedContext=(create_mode, create_pose_mode, create_polygon_mode,
                                                create_ellipse_mode, create_circle_mode,
-                                               edit_mode, edit, copy, delete, shape_style),
+                                               create_obb_mode,
+                                               edit_mode, edit, convert_obb, copy,
+                                               delete, shape_style),
                               onLoadActive=(
                                   create, create_pose, create_polygon, create_ellipse, create_circle,
+                                  create_obb,
                                   create_mode, create_pose_mode, create_polygon_mode,
-                                  create_ellipse_mode, create_circle_mode, edit_mode),
+                                  create_ellipse_mode, create_circle_mode, create_obb_mode,
+                                  edit_mode),
                               onShapesPresent=(toggle_labels,),
                               # Add missing actions for language switching
                               openDir=open_dir, changeSaveDir=change_save_dir,
@@ -720,6 +788,8 @@ class MainWindow(QMainWindow, WindowMixin):
                               nextImg=open_next_image, prevImg=open_prev_image,
                               verify=verify, verifyAll=verify_all, filterUnverified=filter_unverified, toggleLabels=toggle_labels,
                               setVerified=set_verified, setUnverified=set_unverified,
+                              removeAnnotation=remove_annotation,
+                              removeAnnoToPending=remove_anno_to_pending,
                               labels=labels, drawSquares=self.draw_squares_option,
                               # Project management actions
                               newProject=new_project, openProject=open_project, editProject=edit_project, saveProject=save_project, closeProject=close_project,
@@ -836,7 +906,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # Label edit stays available via double-click / Edit menu (Ctrl+E).
         self.actions.beginner = (
             verify, save, None,
-            create, create_pose, create_polygon, create_ellipse, create_circle, None,
+            create, create_pose, create_polygon, create_ellipse, create_circle, create_obb, None,
             undo, copy, delete, None,
             shape_style, None,
             toggle_labels, None,
@@ -845,7 +915,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.advanced = (
             verify, save, None,
             create_mode, create_pose_mode, create_polygon_mode,
-            create_ellipse_mode, create_circle_mode, None,
+            create_ellipse_mode, create_circle_mode, create_obb_mode, None,
             undo, copy, delete, None,
             shape_style, None,
             toggle_labels, None,
@@ -893,6 +963,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.move(position)
         save_dir = ustr(settings.get(SETTING_SAVE_DIR, None))
         self.last_open_dir = ustr(settings.get(SETTING_LAST_OPEN_DIR, None))
+        self.last_export_dir = ustr(settings.get(SETTING_LAST_EXPORT_DIR, None))
         # Legacy fallback only — do not advertise this in the status bar.
         # Real save location is the opened project's annotation_dir.
         if self.default_save_dir is None and save_dir is not None and os.path.exists(save_dir):
@@ -992,9 +1063,10 @@ class MainWindow(QMainWindow, WindowMixin):
         """
         print(f"🔄 Updating UI for language: {lang_code}")
         
-        # Update window title
-        self.setWindowTitle(__appname__)
-        
+        # Update window title / path bar (no image path in title)
+        self.update_window_title()
+        self.update_image_path_bar()
+
         # Retranslate menus
         self.retranslate_menus()
         
@@ -1035,6 +1107,9 @@ class MainWindow(QMainWindow, WindowMixin):
             self.add_images_btn.setText(self.get_str('addImages'))
         if hasattr(self, 'add_folder_btn'):
             self.add_folder_btn.setText(self.get_str('addFolder'))
+        if hasattr(self, 'sync_unannotated_btn'):
+            self.sync_unannotated_btn.setText(self.get_str('syncUnannotated'))
+            self.sync_unannotated_btn.setToolTip(self.get_str('syncUnannotatedTip'))
         if hasattr(self, 'clear_pending_btn'):
             self.clear_pending_btn.setText(self.get_str('clearPending'))
 
@@ -1045,6 +1120,12 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'setUnverified'):
             self.actions.setUnverified.setText(self.get_str('setUnverified'))
             self.actions.setUnverified.setToolTip(self.get_str('setUnverifiedDetail'))
+        if hasattr(self.actions, 'removeAnnotation'):
+            self.actions.removeAnnotation.setText(self.get_str('removeAnnotation'))
+            self.actions.removeAnnotation.setToolTip(self.get_str('removeAnnotationDetail'))
+        if hasattr(self.actions, 'removeAnnoToPending'):
+            self.actions.removeAnnoToPending.setText(self.get_str('removeAnnoToPending'))
+            self.actions.removeAnnoToPending.setToolTip(self.get_str('removeAnnoToPendingDetail'))
         if hasattr(self.actions, 'showInfo'):
             self.actions.showInfo.setText(self.get_str('info'))
             self.actions.showInfo.setToolTip(self.get_str('info'))
@@ -1261,25 +1342,27 @@ class MainWindow(QMainWindow, WindowMixin):
                 if not has_project:
                     if action_item in [self.actions.create, self.actions.createPose,
                                       self.actions.createPolygon, self.actions.createEllipse,
-                                      self.actions.createCircle,
+                                      self.actions.createCircle, self.actions.createObb,
                                       self.actions.edit, self.actions.delete,
                                       self.actions.copy, self.actions.createMode,
                                       self.actions.createPoseMode,
                                       self.actions.createPolygonMode,
                                       self.actions.createEllipseMode,
                                       self.actions.createCircleMode,
+                                      self.actions.createObbMode,
                                       self.actions.editMode]:
                         action_item.setEnabled(False)
                 elif not has_image:
                     if action_item in [self.actions.create, self.actions.createPose,
                                       self.actions.createPolygon, self.actions.createEllipse,
-                                      self.actions.createCircle,
+                                      self.actions.createCircle, self.actions.createObb,
                                       self.actions.edit, self.actions.delete,
                                       self.actions.copy, self.actions.createMode,
                                       self.actions.createPoseMode,
                                       self.actions.createPolygonMode,
                                       self.actions.createEllipseMode,
                                       self.actions.createCircleMode,
+                                      self.actions.createObbMode,
                                       self.actions.editMode]:
                         action_item.setEnabled(False)
                 elif action_item in (getattr(self.actions, 'createPose', None),
@@ -1338,11 +1421,12 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.beginner():
             actions = (self.actions.create, self.actions.createPose,
                        self.actions.createPolygon, self.actions.createEllipse,
-                       self.actions.createCircle)
+                       self.actions.createCircle, self.actions.createObb)
         else:
             actions = (self.actions.createMode, self.actions.createPoseMode,
                        self.actions.createPolygonMode, self.actions.createEllipseMode,
-                       self.actions.createCircleMode, self.actions.editMode)
+                       self.actions.createCircleMode, self.actions.createObbMode,
+                       self.actions.editMode)
         add_actions(self.menus.edit, actions + self.actions.editMenu)
         self.sync_create_actions_enabled(allow_start_draw=True)
         
@@ -1425,6 +1509,10 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.createCircle.setEnabled(can_draw)
         if hasattr(self.actions, 'createCircleMode'):
             self.actions.createCircleMode.setEnabled(can_draw)
+        if hasattr(self.actions, 'createObb'):
+            self.actions.createObb.setEnabled(can_draw)
+        if hasattr(self.actions, 'createObbMode'):
+            self.actions.createObbMode.setEnabled(can_draw)
         if hasattr(self.actions, 'createPose'):
             self.actions.createPose.setEnabled(pose_ok)
         if hasattr(self.actions, 'createPoseMode'):
@@ -1537,6 +1625,9 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.reset_state()
         self.label_coordinates.clear()
         self.combo_box.cb.clear()
+        self.update_window_title()
+        self.update_image_path_bar()
+        self.update_delete_image_action()
 
     def current_item(self):
         items = self.label_list.selectedItems()
@@ -1730,6 +1821,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 (self.get_str('crtEllipse'), 'E'),
                 (self.get_str('crtCircle'), 'C'),
                 (self.get_str('crtCircleFromCenter'), 'Shift'),
+                (self.get_str('crtObb'), 'R'),
                 (self.get_str('delBox'), 'Delete'),
                 (self.get_str('dupBox'), 'Ctrl+D'),
                 (self.get_str('editLabel'), 'Ctrl+E'),
@@ -1957,15 +2049,15 @@ class MainWindow(QMainWindow, WindowMixin):
             self.light_widget.update_tooltip(self.get_str('lightWidgetTitle'))
         
         # Update pending queue buttons
-        if hasattr(self, 'pending_list_widget'):
-            for btn in self.pending_list_widget.parentWidget().findChildren(QPushButton):
-                text = btn.text()
-                if text == '+ 添加图像' or text == '+ Add Images':
-                    btn.setText(self.get_str('addImages'))
-                elif text == '+ 添加文件夹' or text == '+ Add Folder':
-                    btn.setText(self.get_str('addFolder'))
-                elif text == '清空' or text == 'Clear':
-                    btn.setText(self.get_str('clearPending'))
+        if hasattr(self, 'add_images_btn'):
+            self.add_images_btn.setText(self.get_str('addImages'))
+        if hasattr(self, 'add_folder_btn'):
+            self.add_folder_btn.setText(self.get_str('addFolder'))
+        if hasattr(self, 'sync_unannotated_btn'):
+            self.sync_unannotated_btn.setText(self.get_str('syncUnannotated'))
+            self.sync_unannotated_btn.setToolTip(self.get_str('syncUnannotatedTip'))
+        if hasattr(self, 'clear_pending_btn'):
+            self.clear_pending_btn.setText(self.get_str('clearPending'))
 
         # Update toolbar actions tooltips and text
         if hasattr(self.actions, 'open'):
@@ -2010,6 +2102,9 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'createCircle'):
             self.actions.createCircle.setText(self.get_str('crtCircle'))
             self.actions.createCircle.setToolTip(self.get_str('crtCircleDetail'))
+        if hasattr(self.actions, 'createObb'):
+            self.actions.createObb.setText(self.get_str('crtObb'))
+            self.actions.createObb.setToolTip(self.get_str('crtObbDetail'))
         if hasattr(self.actions, 'delete'):
             self.actions.delete.setText(self.get_str('delBox'))
             self.actions.delete.setToolTip(self.get_str('delBoxDetail'))
@@ -2034,12 +2129,18 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'createCircleMode'):
             self.actions.createCircleMode.setText(self.get_str('crtCircle'))
             self.actions.createCircleMode.setToolTip(self.get_str('crtCircleDetail'))
+        if hasattr(self.actions, 'createObbMode'):
+            self.actions.createObbMode.setText(self.get_str('crtObb'))
+            self.actions.createObbMode.setToolTip(self.get_str('crtObbDetail'))
         if hasattr(self.actions, 'editMode'):
             self.actions.editMode.setText(self.get_str('editBox'))
             self.actions.editMode.setToolTip(self.get_str('editBoxDetail'))
         if hasattr(self.actions, 'shapeStyle'):
             self.actions.shapeStyle.setText(self.get_str('shapeStyle'))
             self.actions.shapeStyle.setToolTip(self.get_str('shapeStyleDetail'))
+        if hasattr(self.actions, 'convertObb'):
+            self.actions.convertObb.setText(self.get_str('convertObbToPoly'))
+            self.actions.convertObb.setToolTip(self.get_str('convertObbToPolyDetail'))
         if hasattr(self.actions, 'undo'):
             self.actions.undo.setText(self.get_str('undoAnnotation'))
             self.actions.undo.setToolTip(self.get_str('undoAnnotationDetail'))
@@ -2115,14 +2216,20 @@ class MainWindow(QMainWindow, WindowMixin):
             self.actions.verifyAll.setText(self.get_str('verifyAll'))
             self.actions.verifyAll.setToolTip(self.get_str('verifyAllDetail'))
 
-        # Update set verified / unverified actions
+        # Update set verified / unverified / remove actions
         if hasattr(self.actions, 'setVerified'):
             self.actions.setVerified.setText(self.get_str('setVerified'))
             self.actions.setVerified.setToolTip(self.get_str('setVerifiedDetail'))
         if hasattr(self.actions, 'setUnverified'):
             self.actions.setUnverified.setText(self.get_str('setUnverified'))
             self.actions.setUnverified.setToolTip(self.get_str('setUnverifiedDetail'))
-        
+        if hasattr(self.actions, 'removeAnnotation'):
+            self.actions.removeAnnotation.setText(self.get_str('removeAnnotation'))
+            self.actions.removeAnnotation.setToolTip(self.get_str('removeAnnotationDetail'))
+        if hasattr(self.actions, 'removeAnnoToPending'):
+            self.actions.removeAnnoToPending.setText(self.get_str('removeAnnoToPending'))
+            self.actions.removeAnnoToPending.setToolTip(self.get_str('removeAnnoToPendingDetail'))
+
         # Update filter unverified action
         if hasattr(self.actions, 'filterUnverified'):
             self.actions.filterUnverified.setText(self.get_str('filterUnverified'))
@@ -2158,12 +2265,9 @@ class MainWindow(QMainWindow, WindowMixin):
         if hasattr(self.actions, 'toolbarToggle'):
             self.actions.toolbarToggle.setText(self.get_str('toolbarToggleText'))
 
-        # Update window title if file is loaded
-        if self.file_path:
-            counter = self.counter_str()
-            self.setWindowTitle(__appname__ + ' ' + self.file_path + ' ' + counter)
-        else:
-            self.setWindowTitle(__appname__)
+        # Keep title clean; path lives in the canvas path strip
+        self.update_window_title()
+        self.update_image_path_bar()
 
         # Rebuild toolbar to update brightness and zoom labels
         self.populate_mode_actions()
@@ -2226,6 +2330,20 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.set_editing(False)
         self.sync_create_actions_enabled(allow_start_draw=False)
         tip = self.get_str('crtCircleTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+        self.canvas.setFocus()
+
+    def create_obb_shape(self):
+        """Beginner: two-step rotated rectangle (edge → width)."""
+        assert self.beginner()
+        self.create_intent = 'obb'
+        self.canvas.create_shape_type = 'obb'
+        if hasattr(self.canvas, '_clear_obb_state'):
+            self.canvas._clear_obb_state()
+        self.canvas.set_editing(False)
+        self.sync_create_actions_enabled(allow_start_draw=False)
+        tip = self.get_str('crtObbTip')
         if hasattr(self, 'statusBar') and self.statusBar():
             self.statusBar().showMessage(tip)
         self.canvas.setFocus()
@@ -2297,6 +2415,18 @@ class MainWindow(QMainWindow, WindowMixin):
             self.statusBar().showMessage(tip)
         self.canvas.setFocus()
 
+    def set_create_obb_mode(self):
+        assert self.advanced()
+        self.create_intent = 'obb'
+        self.canvas.create_shape_type = 'obb'
+        if hasattr(self.canvas, '_clear_obb_state'):
+            self.canvas._clear_obb_state()
+        self.toggle_draw_mode(False)
+        tip = self.get_str('crtObbTip')
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(tip)
+        self.canvas.setFocus()
+
     def set_edit_mode(self):
         assert self.advanced()
         self.toggle_draw_mode(True)
@@ -2306,9 +2436,17 @@ class MainWindow(QMainWindow, WindowMixin):
         self.menus.labelList.exec_(self.label_list.mapToGlobal(point))
 
     def pop_completed_list_menu(self, point):
-        """Context menu on completed-annotations list (verify / unverify)."""
-        if not self.file_list_widget.itemAt(point):
+        """Context menu on completed-annotations list (verify / remove)."""
+        item = self.file_list_widget.itemAt(point)
+        if not item:
             return
+        # Right-click on an unselected row: select that row for the action
+        if item not in self.file_list_widget.selectedItems():
+            self.file_list_widget.clearSelection()
+            item.setSelected(True)
+            self.file_list_widget.setCurrentItem(item)
+        if hasattr(self.actions, 'removeAnnoToPending'):
+            self.actions.removeAnnoToPending.setEnabled(bool(self.current_project))
         self.menus.completedList.exec_(self.file_list_widget.mapToGlobal(point))
 
     def edit_label(self):
@@ -2485,6 +2623,86 @@ class MainWindow(QMainWindow, WindowMixin):
                 added_count += 1
         
         QMessageBox.information(self, self.get_str('successTitle'), self.get_str('folderImagesAdded').format(added_count))
+
+    def _project_image_dirs(self):
+        """Candidate image directories for the open project (deduplicated, existing only)."""
+        dirs = []
+        if not self.current_project:
+            return dirs
+        project = self.current_project
+        if project.project_dir:
+            dirs.append(os.path.join(project.project_dir, 'images'))
+        if project.annotation_dir:
+            # Standard: <database>/annotations (+ nested annotations/) with sibling images/
+            anno_base = project.annotation_dir
+            nested = os.path.join(anno_base, 'annotations')
+            if os.path.isdir(nested):
+                dirs.append(os.path.join(anno_base, 'images'))
+            dirs.append(os.path.join(os.path.dirname(anno_base), 'images'))
+            dirs.append(os.path.join(anno_base, 'images'))
+        seen = set()
+        existing = []
+        for path in dirs:
+            norm = os.path.normpath(os.path.abspath(path)) if path else ''
+            if not norm or norm in seen or not os.path.isdir(norm):
+                continue
+            seen.add(norm)
+            existing.append(norm)
+        return existing
+
+    def sync_unannotated_to_pending(self):
+        """Scan project images dirs; add images lacking annotation files to pending list."""
+        if not self.current_project:
+            QMessageBox.warning(
+                self, self.get_str('warningTitle'), self.get_str('pleaseCreateProject'))
+            return
+
+        image_dirs = self._project_image_dirs()
+        if not image_dirs:
+            QMessageBox.warning(
+                self, self.get_str('warningTitle'), self.get_str('syncUnannotatedNoImagesDir'))
+            return
+
+        # Collect unique image paths from all candidate dirs
+        images = []
+        seen_imgs = set()
+        for directory in image_dirs:
+            for path in self.scan_all_images(directory):
+                if path not in seen_imgs:
+                    seen_imgs.add(path)
+                    images.append(path)
+
+        if not images:
+            QMessageBox.information(
+                self, self.get_str('infoTitle'), self.get_str('syncUnannotatedNone'))
+            return
+
+        added = 0
+        already_pending = 0
+        already_annotated = 0
+        for image_path in images:
+            if self._has_annotation(image_path):
+                already_annotated += 1
+                continue
+            if self._add_path_to_pending(image_path):
+                added += 1
+            else:
+                already_pending += 1
+
+        self.img_count = self.pending_list_widget.count()
+        self.update_image_path_bar()
+
+        if added == 0 and already_pending == 0:
+            QMessageBox.information(
+                self, self.get_str('infoTitle'), self.get_str('syncUnannotatedNone'))
+            return
+
+        QMessageBox.information(
+            self,
+            self.get_str('successTitle'),
+            self.get_str('syncUnannotatedResult').format(
+                added, already_pending, already_annotated),
+        )
     
     def clear_pending_queue(self):
         """Clear all items from pending queue"""
@@ -2502,8 +2720,9 @@ class MainWindow(QMainWindow, WindowMixin):
         
         if reply == QMessageBox.Yes:
             self.pending_list_widget.clear()
+            self.update_delete_image_action()
             QMessageBox.information(self, self.get_str('successTitle'), self.get_str('pendingCleared'))
-    
+
     def remove_from_pending_queue(self, image_path):
         """Remove an image from pending queue after annotation is saved"""
         for i in range(self.pending_list_widget.count()):
@@ -2686,6 +2905,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.edit.setEnabled(selected)
         if hasattr(self.actions, 'shapeStyle'):
             self.actions.shapeStyle.setEnabled(selected)
+        if hasattr(self.actions, 'convertObb'):
+            shape = self.canvas.selected_shape
+            self.actions.convertObb.setEnabled(
+                bool(selected and shape is not None
+                     and getattr(shape, 'is_obb', lambda: False)()))
 
     def add_label(self, shape):
         shape.paint_label = self.display_label_option.isChecked()
@@ -3011,6 +3235,8 @@ class MainWindow(QMainWindow, WindowMixin):
                 st = getattr(shape, 'shape_type', None)
                 if intent == 'polygon' or st == 'polygon':
                     shape.shape_type = 'polygon'
+                elif intent == 'obb' or st == 'obb':
+                    shape.shape_type = 'obb'
                 elif intent in ('ellipse', 'circle') or st in ('ellipse', 'circle'):
                     # Type is fixed by the tool used (ellipse tool / circle tool)
                     if st not in ('ellipse', 'circle'):
@@ -3287,8 +3513,8 @@ class MainWindow(QMainWindow, WindowMixin):
             self.toggle_actions(True)
             self.show_bounding_box_from_annotation_file(self.file_path)
 
-            counter = self.counter_str()
-            self.setWindowTitle(__appname__ + ' ' + file_path + ' ' + counter)
+            self.update_window_title()
+            self.update_image_path_bar()
 
             # Default : select last item if there is at least one item
             if self.label_list.count():
@@ -3312,7 +3538,8 @@ class MainWindow(QMainWindow, WindowMixin):
             else:
                 # Project mode: keep current image highlighted in completed list
                 self._highlight_current_in_completed_list()
-            
+
+            self.update_delete_image_action()
             return True
         return False
 
@@ -3321,6 +3548,28 @@ class MainWindow(QMainWindow, WindowMixin):
         Converts image counter to string representation.
         """
         return '[{} / {}]'.format(self.cur_img_idx + 1, self.img_count)
+
+    def update_window_title(self):
+        """Title bar: app name (+ project), never the current image path."""
+        project = getattr(self, 'current_project', None)
+        if project is not None and getattr(project, 'name', None):
+            self.setWindowTitle(f'{__appname__} - {project.name}')
+        else:
+            self.setWindowTitle(__appname__)
+
+    def update_image_path_bar(self):
+        """Sunken strip under the canvas: current image path + counter."""
+        if not hasattr(self, 'image_path_bar'):
+            return
+        file_path = getattr(self, 'file_path', None)
+        if file_path:
+            full = f'{file_path}  {self.counter_str()}'
+            self.image_path_bar.setText(full)
+            self.image_path_bar.setToolTip(full)
+        else:
+            empty = self.get_str('imagePathBarEmpty')
+            self.image_path_bar.setText(empty)
+            self.image_path_bar.setToolTip('')
 
     def format_coordinates(self, width=None, height=None, x=None, y=None):
         """
@@ -3455,6 +3704,11 @@ class MainWindow(QMainWindow, WindowMixin):
             settings[SETTING_LAST_OPEN_DIR] = self.last_open_dir
         else:
             settings[SETTING_LAST_OPEN_DIR] = ''
+
+        if getattr(self, 'last_export_dir', None) and os.path.exists(self.last_export_dir):
+            settings[SETTING_LAST_EXPORT_DIR] = self.last_export_dir
+        else:
+            settings[SETTING_LAST_EXPORT_DIR] = getattr(self, 'last_export_dir', '') or ''
 
         settings[SETTING_AUTO_SAVE] = self.auto_saving.isChecked()
         settings[SETTING_SINGLE_CLASS] = self.single_class_mode.isChecked()
@@ -4133,6 +4387,152 @@ class MainWindow(QMainWindow, WindowMixin):
         # Refresh file list to update colors
         self.update_completed_annotations_list()
 
+    def _resolve_annotation_dir(self):
+        """Return the directory that stores annotation files, or None."""
+        anno_dir = None
+        if self.current_project and self.current_project.annotation_dir:
+            anno_dir = os.path.join(self.current_project.annotation_dir, 'annotations')
+            if not os.path.exists(anno_dir):
+                anno_dir = self.current_project.annotation_dir
+        elif self.default_save_dir:
+            anno_dir = os.path.join(self.default_save_dir, 'annotations')
+            if not os.path.exists(anno_dir):
+                anno_dir = self.default_save_dir
+        if anno_dir and os.path.exists(anno_dir):
+            return anno_dir
+        return None
+
+    def _find_image_for_basename(self, base_name, anno_dir=None):
+        """Locate image file matching an annotation basename."""
+        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.gif', '.webp']
+        search_dirs = []
+        if anno_dir:
+            search_dirs.append(os.path.join(os.path.dirname(anno_dir), 'images'))
+            search_dirs.append(anno_dir)
+        if self.current_project and self.current_project.project_dir:
+            search_dirs.append(os.path.join(self.current_project.project_dir, 'images'))
+        seen = set()
+        for directory in search_dirs:
+            if not directory or directory in seen or not os.path.isdir(directory):
+                continue
+            seen.add(directory)
+            for ext in image_extensions:
+                candidate = os.path.join(directory, base_name + ext)
+                if os.path.exists(candidate):
+                    return candidate
+        return None
+
+    def _add_path_to_pending(self, image_path):
+        """Add image path to pending queue if missing. Returns True if added."""
+        if not image_path or not hasattr(self, 'pending_list_widget'):
+            return False
+        for i in range(self.pending_list_widget.count()):
+            if self.pending_list_widget.item(i).text() == image_path:
+                return False
+        self.pending_list_widget.addItem(image_path)
+        return True
+
+    def _clear_canvas_for_removed_annotation(self):
+        """Clear in-memory shapes after deleting the annotation of the open image."""
+        self.items_to_shapes.clear()
+        self.shapes_to_items.clear()
+        self.label_list.clear()
+        self.label_file = None
+        self.canvas.load_shapes([])
+        self.set_clean()
+        if hasattr(self, 'annotation_undo'):
+            self.annotation_undo.clear()
+        self.update_combo_box()
+
+    def remove_selected_annotations(self, return_to_pending=False):
+        """Delete selected completed annotation files; optionally re-queue images."""
+        selected_items = self.file_list_widget.selectedItems()
+
+        def _status(msg, timeout=5000):
+            if hasattr(self, 'statusBar') and self.statusBar():
+                self.statusBar().showMessage(msg, timeout)
+
+        if not selected_items:
+            _status(self.get_str('noAnnotationsSelected'))
+            return
+
+        if return_to_pending and not self.current_project:
+            QMessageBox.warning(
+                self, self.get_str('warningTitle'), self.get_str('pleaseCreateProject'))
+            return
+
+        count = len(selected_items)
+        confirm_key = (
+            'confirmRemoveAnnoToPending' if return_to_pending else 'confirmRemoveAnnotation')
+        reply = QMessageBox.question(
+            self,
+            self.get_str('confirmTitle'),
+            self.get_str(confirm_key).format(count),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        anno_dir = self._resolve_annotation_dir()
+        if not anno_dir:
+            QMessageBox.warning(
+                self, self.get_str('errorTitle'), self.get_str('annoDirNotFound'))
+            return
+
+        deleted_count = 0
+        pending_added = 0
+        failed_count = 0
+        missing_image_count = 0
+        current_base = None
+        if self.file_path:
+            current_base = os.path.splitext(os.path.basename(self.file_path))[0]
+
+        for item in selected_items:
+            filename = ustr(item.text())
+            filepath = os.path.join(anno_dir, filename)
+            base_name = os.path.splitext(filename)[0]
+            image_path = self._find_image_for_basename(base_name, anno_dir)
+
+            try:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    deleted_count += 1
+                else:
+                    failed_count += 1
+                    continue
+            except Exception as e:
+                print(f'Failed to remove annotation {filename}: {e}')
+                failed_count += 1
+                continue
+
+            if current_base and base_name == current_base:
+                self._clear_canvas_for_removed_annotation()
+
+            if return_to_pending:
+                if image_path and self._add_path_to_pending(image_path):
+                    pending_added += 1
+                elif not image_path:
+                    missing_image_count += 1
+
+        if return_to_pending and hasattr(self, 'pending_list_widget'):
+            self.img_count = self.pending_list_widget.count()
+
+        self.update_completed_annotations_list()
+        self.update_image_path_bar()
+
+        if return_to_pending:
+            result_msg = self.get_str('removeAnnoToPendingResult').format(
+                deleted_count, pending_added)
+        else:
+            result_msg = self.get_str('removeAnnotationResult').format(deleted_count)
+        if failed_count > 0:
+            result_msg += '  ' + self.get_str('removeAnnotationFailed').format(failed_count)
+        if missing_image_count > 0:
+            result_msg += '  ' + self.get_str('removeAnnoImageMissing').format(
+                missing_image_count)
+        _status(result_msg)
+
     def toggle_filter_unverified(self):
         """Toggle filter to show only unverified images based on annotation files"""
         if not hasattr(self.actions, 'filterUnverified'):
@@ -4348,60 +4748,66 @@ class MainWindow(QMainWindow, WindowMixin):
             self.img_count = 1
             self.load_file(filename)
 
-    def save_file(self, _value=False):
-        """Save annotation file and copy image to project's output directory with proper structure"""
+    def save_file(self, _value=False, advance_next=True):
+        """Save annotation file and copy image to project's output directory with proper structure.
+
+        Args:
+            advance_next: If True (manual Ctrl+S), switch to the next image after save.
+                Set False when flushing annotations as part of Save/Close Project.
+        """
         if not self.file_path:
-            return
-        
+            return False
+
+        saved = False
         # Priority: default_save_dir (which is synced with project.annotation_dir)
         # This ensures user's current setting is always used
         if self.default_save_dir is not None and len(ustr(self.default_save_dir)):
             # Create proper directory structure based on format
             anno_dir, img_dir = self._get_output_dirs(ustr(self.default_save_dir))
-            
+
             image_file_name = os.path.basename(self.file_path)
             saved_file_name = os.path.splitext(image_file_name)[0]
             saved_path = os.path.join(anno_dir, saved_file_name)
-            self._save_file(saved_path)
+            saved = bool(self._save_file(saved_path))
             # Copy image file to images directory
             self._copy_image_to_output(img_dir, image_file_name)
-            # After manual save, auto switch to next image
-            self.open_next_image()
         elif self.current_project and self.current_project.annotation_dir:
             # Fallback to project's annotation_dir if default_save_dir is not set
             anno_dir, img_dir = self._get_output_dirs(self.current_project.annotation_dir)
-            
+
             image_file_name = os.path.basename(self.file_path)
             saved_file_name = os.path.splitext(image_file_name)[0]
             saved_path = os.path.join(anno_dir, saved_file_name)
-            self._save_file(saved_path)
+            saved = bool(self._save_file(saved_path))
             # Copy image file to images directory
             self._copy_image_to_output(img_dir, image_file_name)
             # Sync default_save_dir with project
             self.default_save_dir = self.current_project.annotation_dir
-            # After manual save, auto switch to next image
-            self.open_next_image()
         else:
             # Last fallback: save to same directory as image
             image_file_dir = os.path.dirname(self.file_path)
             image_file_name = os.path.basename(self.file_path)
             saved_file_name = os.path.splitext(image_file_name)[0]
             saved_path = os.path.join(image_file_dir, saved_file_name)
-            self._save_file(saved_path)
-            # After manual save, auto switch to next image
+            saved = bool(self._save_file(saved_path))
+
+        if saved and advance_next:
             self.open_next_image()
+        return saved
 
     def _save_file(self, annotation_file_path):
         if annotation_file_path and self.save_labels(annotation_file_path):
             self.set_clean()
             self.statusBar().showMessage(self.get_str('savedToPath').format(annotation_file_path))
             self.statusBar().show()
-            
+
             # After saving, mark as annotated (green color) instead of removing
             if self.file_path:
                 self.mark_as_annotated(self.file_path)
                 self.update_completed_annotations_list()
-    
+            return True
+        return False
+
     def _copy_image_to_output(self, output_dir, image_file_name):
         """Copy image file to output directory
         
@@ -4461,35 +4867,76 @@ class MainWindow(QMainWindow, WindowMixin):
         self.toggle_actions(False)
         self.canvas.setEnabled(False)
 
+    def update_delete_image_action(self):
+        """Enable Delete Image only when a pending-list item is selected (project mode)."""
+        if not hasattr(self, 'actions') or not hasattr(self.actions, 'deleteImg'):
+            return
+        if self.current_project:
+            enabled = bool(self.pending_list_widget.selectedItems())
+        else:
+            # Directory mode has no pending queue; require an open image
+            enabled = bool(getattr(self, 'file_path', None))
+        self.actions.deleteImg.setEnabled(enabled)
+
     def delete_image(self):
-        delete_path = self.file_path
-        if delete_path is not None:
-            idx = self.cur_img_idx
-            if os.path.exists(delete_path):
+        """Delete the selected pending image (project mode) or the open image (directory mode)."""
+        delete_path = None
+        if self.current_project:
+            selected = self.pending_list_widget.selectedItems()
+            if not selected:
+                self.update_delete_image_action()
+                return
+            delete_path = ustr(selected[0].text())
+        else:
+            delete_path = self.file_path
+
+        if not delete_path:
+            self.update_delete_image_action()
+            return
+
+        # If deleting the currently open image, confirm discard of unsaved edits
+        if (self.file_path
+                and os.path.normpath(self.file_path) == os.path.normpath(delete_path)
+                and not self.may_continue()):
+            return
+
+        idx = self.cur_img_idx
+        deleting_current = bool(
+            self.file_path
+            and os.path.normpath(self.file_path) == os.path.normpath(delete_path))
+
+        if os.path.exists(delete_path):
+            try:
                 os.remove(delete_path)
-            
-            # Refresh image list based on mode
-            if self.current_project:
-                # Project mode: remove from pending list
-                for i in range(self.pending_list_widget.count() - 1, -1, -1):
-                    if self.pending_list_widget.item(i).text() == delete_path:
-                        self.pending_list_widget.takeItem(i)
-                        break
-                # Update img_count
-                self.img_count = self.pending_list_widget.count()
-            else:
-                # Directory mode: rescan directory
-                self.import_dir_images(self.last_open_dir)
-            
-            # Load next or previous image
+            except Exception as e:
+                QMessageBox.warning(
+                    self, self.get_str('warningTitle'),
+                    self.get_str('deleteImgFailed').format(delete_path, str(e)))
+                return
+
+        # Refresh image list based on mode
+        if self.current_project:
+            for i in range(self.pending_list_widget.count() - 1, -1, -1):
+                if self.pending_list_widget.item(i).text() == delete_path:
+                    self.pending_list_widget.takeItem(i)
+                    break
+            self.img_count = self.pending_list_widget.count()
+        else:
+            # Directory mode: rescan directory
+            self.import_dir_images(self.last_open_dir)
+
+        if deleting_current:
             if self.img_count > 0:
                 self.cur_img_idx = min(idx, self.img_count - 1)
                 image_list = self.get_current_image_list()
                 if image_list and self.cur_img_idx < len(image_list):
-                    filename = image_list[self.cur_img_idx]
-                    self.load_file(filename)
+                    self.load_file(image_list[self.cur_img_idx])
+                else:
+                    self.close_file()
             else:
                 self.close_file()
+
+        self.update_delete_image_action()
 
     def reset_all(self):
         self.settings.reset()
@@ -4584,6 +5031,27 @@ class MainWindow(QMainWindow, WindowMixin):
         tip = description or 'edit'
         if hasattr(self, 'statusBar') and self.statusBar():
             self.statusBar().showMessage(self.get_str('undoAnnotationDone').format(tip), 2500)
+
+    def convert_obb_to_polygon(self):
+        """Explicitly convert selected rotated rectangle to a free polygon."""
+        shape = self.canvas.selected_shape
+        if shape is None or not getattr(shape, 'is_obb', lambda: False)():
+            return
+        self.push_annotation_undo('convert OBB to polygon')
+        if not shape.convert_to_polygon():
+            if self.annotation_undo.can_undo():
+                self.annotation_undo.pop()
+                self.actions.undo.setEnabled(self.annotation_undo.can_undo())
+            return
+        if hasattr(self.canvas, '_clear_obb_edit_anchors'):
+            self.canvas._clear_obb_edit_anchors()
+        self.canvas.update()
+        self.set_dirty()
+        if hasattr(self.actions, 'convertObb'):
+            self.actions.convertObb.setEnabled(False)
+        if hasattr(self, 'statusBar') and self.statusBar():
+            self.statusBar().showMessage(
+                self.get_str('convertObbToPolyDone'), 3000)
 
     def delete_selected_shape(self):
         # Pose: if a keypoint is highlighted, clear that slot (keep K order)
@@ -5182,9 +5650,10 @@ class MainWindow(QMainWindow, WindowMixin):
         # Update completed annotations list
         self.update_completed_annotations_list()
         
-        # Update window title
-        self.setWindowTitle(f'{__appname__} - {project.name}')
-        
+        # Update window title (project name only; image path is in the strip)
+        self.update_window_title()
+        self.update_image_path_bar()
+
         # Enable save project action
         self.actions.saveProject.setEnabled(True)
         self.actions.closeProject.setEnabled(True)
@@ -5203,35 +5672,45 @@ class MainWindow(QMainWindow, WindowMixin):
             msg = f'{msg}  ({self.get_str("outputDir")}: {project.annotation_dir})'
         self.statusBar().showMessage(msg, 5000)
         print(f'Project loaded: {project.name}')
-    
+        self.update_delete_image_action()
+
     def save_project(self):
-        """Save current project"""
+        """Save current project metadata and flush unsaved annotation for the open image."""
         if not self.current_project:
             QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noOpenProject'))
             return
-        
+
         try:
+            # Persist in-progress annotation before writing the .lbc project file
+            if self.dirty and self.file_path:
+                if not self.save_file(advance_next=False):
+                    QMessageBox.warning(
+                        self, self.get_str('warningTitle'),
+                        self.get_str('saveProjectAnnoFailed'))
+                    return
+                print('Current image annotation saved with project')
+
             # Update project with current state
             self.current_project.labels = self.label_hist.copy()
             self.current_project.annotation_dir = self.default_save_dir or ''
-            
+
             # Save project file
             self.current_project.save()
-            
+
             QMessageBox.information(self, self.get_str('successTitle'), self.get_str('projectSaved'))
             print(f'Project saved: {self.current_project.project_file}')
-            
+
         except Exception as e:
             QMessageBox.critical(
                 self, self.get_str('errorTitle'),
                 f'{self.get_str("saveProjectFailed")}\n{str(e)}')
-    
+
     def close_project(self):
         """Close current project after saving and reset to initial state"""
         if not self.current_project:
             QMessageBox.warning(self, self.get_str('warningTitle'), self.get_str('noOpenProject'))
             return
-        
+
         # Ask user to confirm
         reply = QMessageBox.question(
             self,
@@ -5240,19 +5719,26 @@ class MainWindow(QMainWindow, WindowMixin):
             QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
             QMessageBox.Yes
         )
-        
+
         if reply == QMessageBox.Cancel:
             return
-        
+
         if reply == QMessageBox.Yes:
             # Save current image annotation if there are unsaved changes
             if self.dirty and self.file_path:
                 try:
-                    self.save_file()
-                    print(f'Current image annotation saved before closing project')
+                    if not self.save_file(advance_next=False):
+                        QMessageBox.warning(
+                            self, self.get_str('warningTitle'),
+                            self.get_str('saveProjectAnnoFailed'))
+                        return
+                    print('Current image annotation saved before closing project')
                 except Exception as e:
-                    print(f'Warning: Failed to save current image: {e}')
-            
+                    QMessageBox.critical(
+                        self, self.get_str('errorTitle'),
+                        f'{self.get_str("saveProjectAnnoFailed")}\n{str(e)}')
+                    return
+
             # Save project configuration
             try:
                 self.current_project.labels = self.label_hist.copy()
@@ -5264,10 +5750,10 @@ class MainWindow(QMainWindow, WindowMixin):
                     self, self.get_str('errorTitle'),
                     f'{self.get_str("saveProjectFailed2")}\n{str(e)}')
                 return
-        
+
         # Reset to initial state
         self.reset_to_initial_state()
-        
+
         QMessageBox.information(self, self.get_str('successTitle'), self.get_str('projectClosed'))
         print('Project closed')
     
@@ -5332,21 +5818,24 @@ class MainWindow(QMainWindow, WindowMixin):
         # Disable annotation buttons when no project loaded
         for action_item in [self.actions.create, self.actions.createPose,
                            self.actions.createPolygon, self.actions.createEllipse,
-                           self.actions.createCircle,
+                           self.actions.createCircle, self.actions.createObb,
                            self.actions.edit, self.actions.delete,
                            self.actions.copy, self.actions.createMode,
                            self.actions.createPoseMode,
                            self.actions.createPolygonMode,
                            self.actions.createEllipseMode,
-                           self.actions.createCircleMode, self.actions.editMode]:
+                           self.actions.createCircleMode,
+                           self.actions.createObbMode, self.actions.editMode]:
             action_item.setEnabled(False)
         
-        # Reset window title
-        self.setWindowTitle(__appname__)
-        
+        # Reset window title and path strip
+        self.update_window_title()
+        self.update_image_path_bar()
+        self.update_delete_image_action()
+
         # Reset dirty flag
         self.dirty = False
-    
+
     def update_recent_projects_menu(self):
         """Update the recent projects menu with latest projects"""
         
@@ -5586,10 +6075,83 @@ class MainWindow(QMainWindow, WindowMixin):
             return None
         return {'image_path': image_path or data.get('image_path'), 'annotations': anns}
 
+    def _annotation_file_to_obb_item(self, anno_path):
+        """Convert one annotation file to export item for YOLO-OBB."""
+        from libs.annotation_converter import AnnotationConverter
+
+        image_path = self._resolve_image_for_annotation(anno_path)
+        if not image_path:
+            return None
+
+        ext = os.path.splitext(anno_path)[1].lower()
+        try:
+            if ext == '.json' and self._json_looks_like_labelcraft(anno_path):
+                data = AnnotationConverter.read_labelcraft_json(anno_path)
+            else:
+                # OBB corners only exist reliably in LabelCraft JSON
+                return None
+        except Exception as e:
+            print(f'OBB export skip {anno_path}: {e}')
+            return None
+
+        anns = []
+        for ann in data.get('annotations', []):
+            if (ann.get('type') or '').lower() != 'obb':
+                continue
+            points = ann.get('points') or []
+            if len(points) < 4:
+                continue
+            anns.append({
+                'label': ann['label'],
+                'type': 'obb',
+                'points': [[float(p[0]), float(p[1])] for p in points[:4]],
+            })
+        if not anns:
+            return None
+        return {'image_path': image_path or data.get('image_path'), 'annotations': anns}
+
+    def _annotation_file_to_seg_item(self, anno_path):
+        """Convert one annotation file to export item for YOLO-Seg / COCO-Seg."""
+        from libs.annotation_converter import AnnotationConverter
+
+        image_path = self._resolve_image_for_annotation(anno_path)
+        if not image_path:
+            return None
+
+        ext = os.path.splitext(anno_path)[1].lower()
+        try:
+            if ext == '.json' and self._json_looks_like_labelcraft(anno_path):
+                data = AnnotationConverter.read_labelcraft_json(anno_path)
+            else:
+                return None
+        except Exception as e:
+            print(f'Seg export skip {anno_path}: {e}')
+            return None
+
+        anns = []
+        for ann in data.get('annotations', []):
+            pts = seg_points_from_ann(ann)
+            if not pts or len(pts) < 3:
+                continue
+            anns.append({
+                'label': ann.get('label', ''),
+                'type': ann.get('type') or 'polygon',
+                'points': [[float(p[0]), float(p[1])] for p in pts],
+            })
+        if not anns:
+            return None
+        return {'image_path': image_path or data.get('image_path'), 'annotations': anns}
+
     def _export_format_display_name(self, fmt):
         """Human-readable export format name for result dialog."""
         if fmt == 'YOLO_POSE':
             return self.get_str('exportFormatYoloPose')
+        if fmt == 'YOLO_OBB':
+            return self.get_str('exportFormatYoloObb')
+        if fmt == 'YOLO_SEG':
+            return self.get_str('exportFormatYoloSeg')
+        if fmt == 'COCO_SEG':
+            return self.get_str('exportFormatCocoSeg')
         if fmt == LabelFileFormat.LABELCRAFT_JSON:
             return self.get_str('exportFormatLabelCraftJSON')
         if fmt == LabelFileFormat.YOLO:
@@ -5772,6 +6334,288 @@ class MainWindow(QMainWindow, WindowMixin):
             if progress is not None:
                 progress.close()
 
+    def _export_yolo_obb_dataset(self, export_dir, anno_dir, annotation_files, copy_images=True):
+        """Export rotated rectangles as Ultralytics YOLO-OBB dataset."""
+        class_list = list(self.label_hist) if self.label_hist else ['object']
+        if self.current_project:
+            class_list = list(self.current_project.labels) or class_list
+
+        files = [p for p in annotation_files if not p.endswith('classes.txt')]
+        total = len(files)
+        progress = self._make_export_progress_dialog(total)
+        cancelled = False
+        items = []
+        skipped = 0
+        try:
+            for idx, anno_path in enumerate(files, 1):
+                if not self._update_export_progress(
+                    progress, idx, total, os.path.basename(anno_path)
+                ):
+                    cancelled = True
+                    break
+                item = self._annotation_file_to_obb_item(anno_path)
+                if item and item.get('annotations'):
+                    items.append(item)
+                else:
+                    skipped += 1
+
+            if cancelled:
+                progress.close()
+                QMessageBox.information(
+                    self, self.get_str('exportProgressTitle'), self.get_str('exportCancelled')
+                )
+                return
+
+            if not items:
+                progress.close()
+                QMessageBox.warning(
+                    self, self.get_str('warningTitle'), self.get_str('exportYoloObbNoItems'))
+                return
+
+            progress.setLabelText(self.get_str('exportProgressWriting'))
+            progress.setRange(0, 0)
+            QApplication.processEvents()
+
+            yaml_path = export_yolo_obb_dataset(
+                items,
+                export_dir,
+                class_list=class_list,
+                split='train',
+                copy_images=copy_images,
+            )
+            progress.close()
+            lines = [
+                self.get_str('exportResultObbOk'),
+                '',
+                f'{self.get_str("exportFormat")}: {self.get_str("exportFormatYoloObb")}',
+                self.get_str('successfullyExported').format(len(items)),
+            ]
+            if skipped:
+                lines.append(self.get_str('exportResultObbSkipped').format(skipped))
+            lines.extend([
+                '',
+                self.get_str('exportResultLayoutObb'),
+                f'{self.get_str("exportLocation")}:',
+                export_dir,
+                '',
+                self.get_str('exportResultObbTrainHint').format(yaml_path),
+            ])
+            self._show_export_result_dialog(
+                self.get_str('exportComplete'), lines, folder_path=export_dir
+            )
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(
+                self, self.get_str('errorTitle'),
+                self.get_str('exportYoloObbFailed').format(e))
+            import traceback
+            traceback.print_exc()
+        finally:
+            if progress is not None:
+                progress.close()
+
+    def _export_yolo_seg_dataset(self, export_dir, anno_dir, annotation_files, copy_images=True):
+        """Export polygons as Ultralytics YOLO-Seg dataset."""
+        class_list = list(self.label_hist) if self.label_hist else ['object']
+        if self.current_project:
+            class_list = list(self.current_project.labels) or class_list
+
+        files = [p for p in annotation_files if not p.endswith('classes.txt')]
+        total = len(files)
+        progress = self._make_export_progress_dialog(total)
+        cancelled = False
+        items = []
+        skipped = 0
+        try:
+            for idx, anno_path in enumerate(files, 1):
+                if not self._update_export_progress(
+                    progress, idx, total, os.path.basename(anno_path)
+                ):
+                    cancelled = True
+                    break
+                item = self._annotation_file_to_seg_item(anno_path)
+                if item and item.get('annotations'):
+                    items.append(item)
+                else:
+                    skipped += 1
+
+            if cancelled:
+                progress.close()
+                QMessageBox.information(
+                    self, self.get_str('exportProgressTitle'), self.get_str('exportCancelled')
+                )
+                return
+
+            if not items:
+                progress.close()
+                QMessageBox.warning(
+                    self, self.get_str('warningTitle'), self.get_str('exportYoloSegNoItems'))
+                return
+
+            progress.setLabelText(self.get_str('exportProgressWriting'))
+            progress.setRange(0, 0)
+            QApplication.processEvents()
+
+            yaml_path = export_yolo_seg_dataset(
+                items,
+                export_dir,
+                class_list=class_list,
+                split='train',
+                copy_images=copy_images,
+            )
+            progress.close()
+            lines = [
+                self.get_str('exportResultSegOk'),
+                '',
+                f'{self.get_str("exportFormat")}: {self.get_str("exportFormatYoloSeg")}',
+                self.get_str('successfullyExported').format(len(items)),
+            ]
+            if skipped:
+                lines.append(self.get_str('exportResultSegSkipped').format(skipped))
+            lines.extend([
+                '',
+                self.get_str('exportResultLayoutSeg'),
+                f'{self.get_str("exportLocation")}:',
+                export_dir,
+                '',
+                self.get_str('exportResultSegTrainHint').format(yaml_path),
+            ])
+            self._show_export_result_dialog(
+                self.get_str('exportComplete'), lines, folder_path=export_dir
+            )
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(
+                self, self.get_str('errorTitle'),
+                self.get_str('exportYoloSegFailed').format(e))
+            import traceback
+            traceback.print_exc()
+        finally:
+            if progress is not None:
+                progress.close()
+
+    def _export_coco_seg_dataset(self, export_dir, anno_dir, annotation_files, copy_images=True):
+        """Export polygons as a COCO segmentation dataset (one JSON)."""
+        class_list = list(self.label_hist) if self.label_hist else ['object']
+        if self.current_project:
+            class_list = list(self.current_project.labels) or class_list
+
+        files = [p for p in annotation_files if not p.endswith('classes.txt')]
+        total = len(files)
+        progress = self._make_export_progress_dialog(total)
+        cancelled = False
+        items = []
+        skipped = 0
+        try:
+            for idx, anno_path in enumerate(files, 1):
+                if not self._update_export_progress(
+                    progress, idx, total, os.path.basename(anno_path)
+                ):
+                    cancelled = True
+                    break
+                item = self._annotation_file_to_seg_item(anno_path)
+                if item and item.get('annotations'):
+                    items.append(item)
+                else:
+                    skipped += 1
+
+            if cancelled:
+                progress.close()
+                QMessageBox.information(
+                    self, self.get_str('exportProgressTitle'), self.get_str('exportCancelled')
+                )
+                return
+
+            if not items:
+                progress.close()
+                QMessageBox.warning(
+                    self, self.get_str('warningTitle'), self.get_str('exportCocoSegNoItems'))
+                return
+
+            progress.setLabelText(self.get_str('exportProgressWriting'))
+            progress.setRange(0, 0)
+            QApplication.processEvents()
+
+            json_path = export_coco_seg_dataset(
+                items,
+                export_dir,
+                class_list=class_list,
+                copy_images=copy_images,
+            )
+            progress.close()
+            lines = [
+                self.get_str('exportResultCocoSegOk'),
+                '',
+                f'{self.get_str("exportFormat")}: {self.get_str("exportFormatCocoSeg")}',
+                self.get_str('successfullyExported').format(len(items)),
+            ]
+            if skipped:
+                lines.append(self.get_str('exportResultSegSkipped').format(skipped))
+            lines.extend([
+                '',
+                self.get_str('exportResultLayoutCocoSeg'),
+                f'{self.get_str("exportLocation")}:',
+                export_dir,
+                '',
+                self.get_str('exportResultCocoSegHint').format(json_path),
+            ])
+            self._show_export_result_dialog(
+                self.get_str('exportComplete'), lines, folder_path=export_dir
+            )
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(
+                self, self.get_str('errorTitle'),
+                self.get_str('exportCocoSegFailed').format(e))
+            import traceback
+            traceback.print_exc()
+        finally:
+            if progress is not None:
+                progress.close()
+
+    def _default_export_dir(self, fmt=None):
+        """Suggest a default export directory (shown in the export dialog)."""
+        last = getattr(self, 'last_export_dir', None)
+        if last:
+            last = ustr(last).strip()
+            if last:
+                return os.path.abspath(last)
+
+        base = None
+        if self.current_project and getattr(self.current_project, 'project_dir', None):
+            base = self.current_project.project_dir
+        elif self.last_open_dir and os.path.isdir(self.last_open_dir):
+            base = self.last_open_dir
+        elif self.default_save_dir and os.path.isdir(self.default_save_dir):
+            base = os.path.dirname(self.default_save_dir.rstrip(os.sep)) or self.default_save_dir
+        else:
+            base = os.getcwd()
+
+        folder = 'export'
+        if fmt == 'YOLO_POSE':
+            folder = 'export_yolo_pose'
+        elif fmt == 'YOLO_OBB':
+            folder = 'export_yolo_obb'
+        elif fmt == 'YOLO_SEG':
+            folder = 'export_yolo_seg'
+        elif fmt == 'COCO_SEG':
+            folder = 'export_coco_seg'
+        elif fmt == LabelFileFormat.YOLO:
+            folder = 'export_yolo_detect'
+        return os.path.abspath(os.path.join(base, folder))
+
+    def _remember_export_dir(self, export_dir):
+        """Persist last used export directory for the next dialog default."""
+        if not export_dir:
+            return
+        path = os.path.abspath(ustr(export_dir))
+        self.last_export_dir = path
+        try:
+            self.settings[SETTING_LAST_EXPORT_DIR] = path
+            self.settings.save()
+        except Exception:
+            pass
+
     def export_annotations_dialog(self, _value=False):
         """Export all annotations and corresponding images to a specified directory
         
@@ -5814,25 +6658,31 @@ class MainWindow(QMainWindow, WindowMixin):
                 + self.get_str('pleaseAnnotateFirst'))
             return
         
-        # Create format selection dialog
-        from PySide6.QtWidgets import QFileDialog, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox, QRadioButton, QCheckBox
+        # Create format selection dialog (wider + two-column layout)
+        from PySide6.QtWidgets import (
+            QFileDialog, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
+            QPushButton, QLabel, QGroupBox, QRadioButton, QCheckBox, QLineEdit,
+            QSizePolicy, QButtonGroup,
+        )
         
         dialog = QDialog(self)
         dialog.setWindowTitle(self.get_str('exportDialogTitle'))
-        dialog.setMinimumSize(500, 450)
+        dialog.setMinimumSize(820, 520)
+        dialog.resize(880, 560)
         
-        main_layout = QVBoxLayout()
-        
-        # Format selection group
-        format_group = QGroupBox(self.get_str('formatSelection'))
-        format_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(14, 12, 14, 12)
         
         format_json = QRadioButton(self.get_str('exportFormatLabelCraftJSON'))
         format_voc = QRadioButton(self.get_str('exportFormatVOC'))
         format_yolo = QRadioButton(self.get_str('exportFormatYoloDetect'))
         format_yolo_pose = QRadioButton(self.get_str('exportFormatYoloPose'))
+        format_yolo_obb = QRadioButton(self.get_str('exportFormatYoloObb'))
+        format_yolo_seg = QRadioButton(self.get_str('exportFormatYoloSeg'))
         format_createml = QRadioButton(self.get_str('exportFormatCreateML'))
         format_coco = QRadioButton(self.get_str('exportFormatCOCO'))
+        format_coco_seg = QRadioButton(self.get_str('exportFormatCocoSeg'))
         format_csv = QRadioButton(self.get_str('exportFormatCSV'))
 
         # Defaults: pose task → YOLO Pose; else YOLO Detect (AABB) for JSON projects
@@ -5853,74 +6703,233 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             format_yolo.setChecked(True)
 
-        format_layout.addWidget(format_json)
-        format_layout.addWidget(format_yolo)
-        format_layout.addWidget(format_yolo_pose)
-        format_layout.addWidget(format_voc)
-        format_layout.addWidget(format_createml)
-        format_layout.addWidget(format_coco)
-        format_layout.addWidget(format_csv)
-        format_group.setLayout(format_layout)
-        main_layout.addWidget(format_group)
+        # Keep exclusivity even when split across columns
+        format_btn_group = QButtonGroup(dialog)
+        format_radios = (
+            format_json, format_yolo, format_yolo_pose, format_yolo_obb, format_yolo_seg,
+            format_voc, format_createml, format_coco, format_coco_seg, format_csv,
+        )
+        for rb in format_radios:
+            format_btn_group.addButton(rb)
+
+        # Top row: formats (left, 2-col) | tip + options (right)
+        top_row = QHBoxLayout()
+        top_row.setSpacing(12)
+
+        format_group = QGroupBox(self.get_str('formatSelection'))
+        format_grid = QGridLayout()
+        format_grid.setHorizontalSpacing(18)
+        format_grid.setVerticalSpacing(6)
+        format_grid.setContentsMargins(10, 8, 10, 8)
+        # Column 0: YOLO family + JSON
+        left_formats = (
+            format_json, format_yolo, format_yolo_pose, format_yolo_obb, format_yolo_seg,
+        )
+        # Column 1: other frameworks
+        right_formats = (
+            format_voc, format_createml, format_coco, format_coco_seg, format_csv,
+        )
+        for row, rb in enumerate(left_formats):
+            format_grid.addWidget(rb, row, 0)
+        for row, rb in enumerate(right_formats):
+            format_grid.addWidget(rb, row, 1)
+        format_grid.setColumnStretch(0, 1)
+        format_grid.setColumnStretch(1, 1)
+        format_group.setLayout(format_grid)
+        format_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        top_row.addWidget(format_group, 3)
+
+        right_col = QVBoxLayout()
+        right_col.setSpacing(8)
 
         tip_label = QLabel(self.get_str('exportFormatTip'))
         tip_label.setWordWrap(True)
-        tip_label.setStyleSheet('color: palette(mid); padding: 4px 8px;')
-        main_layout.addWidget(tip_label)
-        
-        # Options group
+        tip_label.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        tip_label.setStyleSheet(
+            'color: palette(mid); padding: 6px 8px; '
+            'background-color: palette(alternate-base); border-radius: 4px;'
+        )
+        tip_label.setMinimumWidth(260)
+        tip_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        right_col.addWidget(tip_label, 1)
+
         options_group = QGroupBox(self.get_str('exportOptions'))
         options_layout = QVBoxLayout()
-        
+        options_layout.setSpacing(6)
         export_images_check = QCheckBox(self.get_str('exportImagesOption'))
         export_images_check.setChecked(True)
         options_layout.addWidget(export_images_check)
-        
         only_annotated_check = QCheckBox(self.get_str('onlyAnnotatedOption'))
         only_annotated_check.setChecked(True)
         options_layout.addWidget(only_annotated_check)
-        
+        options_layout.addStretch(1)
         options_group.setLayout(options_layout)
-        main_layout.addWidget(options_group)
+        right_col.addWidget(options_group, 0)
+
+        top_row.addLayout(right_col, 2)
+        main_layout.addLayout(top_row, 1)
+
+        # Export path (full width)
+        path_group = QGroupBox(self.get_str('exportPathGroup'))
+        path_layout = QVBoxLayout()
+        path_row = QHBoxLayout()
+        export_path_edit = QLineEdit()
+        export_path_edit.setPlaceholderText(self.get_str('exportPathPlaceholder'))
+        export_path_edit.setClearButtonEnabled(True)
+        browse_btn = QPushButton(self.get_str('browseButton'))
+        browse_btn.setFixedWidth(96)
+
+        def _current_fmt_key():
+            if format_yolo_pose.isChecked():
+                return 'YOLO_POSE'
+            if format_yolo_obb.isChecked():
+                return 'YOLO_OBB'
+            if format_yolo_seg.isChecked():
+                return 'YOLO_SEG'
+            if format_coco_seg.isChecked():
+                return 'COCO_SEG'
+            if format_yolo.isChecked():
+                return LabelFileFormat.YOLO
+            if format_json.isChecked():
+                return LabelFileFormat.LABELCRAFT_JSON
+            if format_voc.isChecked():
+                return LabelFileFormat.PASCAL_VOC
+            if format_createml.isChecked():
+                return LabelFileFormat.CREATE_ML
+            if format_coco.isChecked():
+                return LabelFileFormat.COCO
+            if format_csv.isChecked():
+                return LabelFileFormat.CSV
+            return None
+
+        # Prefer remembered path; otherwise format-aware default under project
+        initial_path = self._default_export_dir(_current_fmt_key())
+        export_path_edit.setText(initial_path)
+        path_hint = QLabel(self.get_str('exportPathTip'))
+        path_hint.setWordWrap(True)
+        path_hint.setStyleSheet('color: palette(mid);')
+
+        def browse_export_path():
+            start = export_path_edit.text().strip() or initial_path
+            if start and not os.path.isdir(start):
+                start = os.path.dirname(start) or start
+            chosen = QFileDialog.getExistingDirectory(
+                dialog,
+                self.get_str('selectExportDir'),
+                start if start and os.path.isdir(start) else (self.last_open_dir or '.'),
+                QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+            )
+            if chosen:
+                export_path_edit.setText(ustr(chosen))
+
+        def maybe_refresh_default_path():
+            # Only auto-refresh when user has not customized away from a prior default
+            # under the project (or when field is empty).
+            cur = export_path_edit.text().strip()
+            if not cur:
+                export_path_edit.setText(self._default_export_dir(_current_fmt_key()))
+                return
+            # If current path still looks like our generated default folder name, update it
+            base_name = os.path.basename(os.path.normpath(cur))
+            if base_name.startswith('export'):
+                suggested = self._default_export_dir(_current_fmt_key())
+                # Keep parent if user picked a sibling export_* under same base
+                parent = os.path.dirname(os.path.normpath(cur))
+                sug_parent = os.path.dirname(os.path.normpath(suggested))
+                if parent == sug_parent or not getattr(self, 'last_export_dir', None):
+                    export_path_edit.setText(suggested)
+
+        browse_btn.clicked.connect(browse_export_path)
+        for rb in format_radios:
+            rb.toggled.connect(lambda checked: checked and maybe_refresh_default_path())
+
+        path_row.addWidget(export_path_edit, 1)
+        path_row.addWidget(browse_btn)
+        path_layout.addLayout(path_row)
+        path_layout.addWidget(path_hint)
+        path_group.setLayout(path_layout)
+        main_layout.addWidget(path_group)
         
-        # Info label
-        info_label = QLabel(
-            self.get_str('exportInstructions') + '\n'
-            + self.get_str('willCreateDirs') + '\n'
-            + self.get_str('skipUnannotated') + '\n'
-            + self.get_str('noProjectFile') + '\n'
-            + self.get_str('supportConversion')
+        # Compact notes (two short columns)
+        notes_row = QHBoxLayout()
+        notes_row.setSpacing(10)
+        note_left = QLabel(
+            '• ' + self.get_str('willCreateDirs') + '\n'
+            + '• ' + self.get_str('skipUnannotated')
         )
-        info_label.setWordWrap(True)
-        # Use palette colors for better readability in all themes
-        info_label.setStyleSheet(
-            'padding: 10px; '
-            'background-color: palette(alternate-base); '
-            'color: palette(text); '
-            'border-radius: 4px;'
+        note_right = QLabel(
+            '• ' + self.get_str('noProjectFile') + '\n'
+            + '• ' + self.get_str('supportConversion')
         )
-        main_layout.addWidget(info_label)
+        for note in (note_left, note_right):
+            note.setWordWrap(True)
+            note.setStyleSheet(
+                'padding: 8px 10px; '
+                'background-color: palette(alternate-base); '
+                'color: palette(text); '
+                'border-radius: 4px;'
+            )
+            notes_row.addWidget(note, 1)
+        main_layout.addLayout(notes_row)
         
         # Buttons
         button_layout = QHBoxLayout()
         button_ok = QPushButton(self.get_str('startExport'))
         button_cancel = QPushButton(self.get_str('cancel'))
+        button_ok.setMinimumWidth(110)
+        button_cancel.setMinimumWidth(90)
         button_layout.addStretch()
         button_layout.addWidget(button_ok)
         button_layout.addWidget(button_cancel)
         main_layout.addLayout(button_layout)
         
-        dialog.setLayout(main_layout)
-        
         # Connect buttons
         selected_format = [None]
+        selected_export_dir = [None]
         def on_ok():
+            path = export_path_edit.text().strip()
+            if not path:
+                QMessageBox.warning(
+                    dialog, self.get_str('warningTitle'),
+                    self.get_str('exportPathRequired'))
+                return
+            path = os.path.abspath(ustr(path))
+            if os.path.isfile(path):
+                QMessageBox.warning(
+                    dialog, self.get_str('warningTitle'),
+                    self.get_str('exportPathNotDir').format(path))
+                return
+            if not os.path.isdir(path):
+                reply = QMessageBox.question(
+                    dialog,
+                    self.get_str('warningTitle'),
+                    self.get_str('exportPathCreateConfirm').format(path),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+                try:
+                    os.makedirs(path, exist_ok=True)
+                except Exception as e:
+                    QMessageBox.critical(
+                        dialog, self.get_str('errorTitle'),
+                        self.get_str('exportPathCreateFailed').format(path, e))
+                    return
+
             if format_json.isChecked():
                 selected_format[0] = LabelFileFormat.LABELCRAFT_JSON
             elif format_voc.isChecked():
                 selected_format[0] = LabelFileFormat.PASCAL_VOC
             elif format_yolo_pose.isChecked():
                 selected_format[0] = 'YOLO_POSE'
+            elif format_yolo_obb.isChecked():
+                selected_format[0] = 'YOLO_OBB'
+            elif format_yolo_seg.isChecked():
+                selected_format[0] = 'YOLO_SEG'
+            elif format_coco_seg.isChecked():
+                selected_format[0] = 'COCO_SEG'
             elif format_yolo.isChecked():
                 selected_format[0] = LabelFileFormat.YOLO
             elif format_createml.isChecked():
@@ -5929,6 +6938,7 @@ class MainWindow(QMainWindow, WindowMixin):
                 selected_format[0] = LabelFileFormat.COCO
             elif format_csv.isChecked():
                 selected_format[0] = LabelFileFormat.CSV
+            selected_export_dir[0] = path
             dialog.accept()
         
         button_ok.clicked.connect(on_ok)
@@ -5937,6 +6947,11 @@ class MainWindow(QMainWindow, WindowMixin):
         # Show dialog
         if dialog.exec() != QDialog.Accepted or selected_format[0] is None:
             return
+
+        export_dir = ustr(selected_export_dir[0])
+        if not export_dir:
+            return
+        self._remember_export_dir(export_dir)
 
         # Soft warnings for task / format mismatch
         is_pose_proj = bool(self.current_project and self.current_project.is_pose_task())
@@ -5962,29 +6977,24 @@ class MainWindow(QMainWindow, WindowMixin):
                 return
 
         if selected_format[0] == 'YOLO_POSE':
-            export_dir = QFileDialog.getExistingDirectory(
-                self,
-                self.get_str('selectYoloPoseExportDir'),
-                self.last_open_dir if self.last_open_dir else '.',
-                QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
-            )
-            if export_dir:
-                self._export_yolo_pose_dataset(export_dir, anno_dir, annotation_files,
-                                              copy_images=export_images_check.isChecked())
+            self._export_yolo_pose_dataset(export_dir, anno_dir, annotation_files,
+                                          copy_images=export_images_check.isChecked())
             return
-        
-        # Open directory selection dialog
-        export_dir = QFileDialog.getExistingDirectory(
-            self,
-            self.get_str('selectExportDir'),
-            self.last_open_dir or '.',
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
-        )
-        
-        if not export_dir:
+
+        if selected_format[0] == 'YOLO_OBB':
+            self._export_yolo_obb_dataset(export_dir, anno_dir, annotation_files,
+                                         copy_images=export_images_check.isChecked())
             return
-        
-        export_dir = ustr(export_dir)
+
+        if selected_format[0] == 'YOLO_SEG':
+            self._export_yolo_seg_dataset(export_dir, anno_dir, annotation_files,
+                                         copy_images=export_images_check.isChecked())
+            return
+
+        if selected_format[0] == 'COCO_SEG':
+            self._export_coco_seg_dataset(export_dir, anno_dir, annotation_files,
+                                         copy_images=export_images_check.isChecked())
+            return
         
         # Create subdirectories for export
         import shutil

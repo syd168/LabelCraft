@@ -6,7 +6,7 @@ from PySide6.QtGui import *
 from PySide6.QtCore import *
 
 from libs.utils import distance
-import sys
+import math
 
 DEFAULT_LINE_COLOR = QColor(0, 255, 0, 128)
 DEFAULT_FILL_COLOR = QColor(255, 0, 0, 28)
@@ -84,7 +84,7 @@ class Shape(object):
         self.selected = False
         self.difficult = difficult
         self.paint_label = paint_label
-        self.shape_type = shape_type  # 'rectangle' | 'pose' | 'polygon' | 'ellipse' | 'circle'
+        self.shape_type = shape_type  # 'rectangle' | 'pose' | 'polygon' | 'ellipse' | 'circle' | 'obb'
         # Pose keypoints: list of {'x': float, 'y': float, 'v': int}
         self.keypoints = []
         self.keypoint_names = []
@@ -185,6 +185,9 @@ class Shape(object):
     def is_ellipse_like(self):
         return self.shape_type in ('ellipse', 'circle')
 
+    def is_obb(self):
+        return self.shape_type == 'obb' and len(self.points) >= 4
+
     def axis_aligned_rect(self):
         """Bounding rect from points (used by ellipse/circle/bbox shapes)."""
         if not self.points:
@@ -192,6 +195,78 @@ class Shape(object):
         xs = [p.x() for p in self.points]
         ys = [p.y() for p in self.points]
         return QRectF(QPointF(min(xs), min(ys)), QPointF(max(xs), max(ys)))
+
+    def obb_geometry(self):
+        """Return (cx, cy, w, h, ux, uy, nx, ny) for a 4-corner OBB.
+
+        p0→p1 is width axis (u); p0→p3 is height axis (n).
+        """
+        if len(self.points) < 4:
+            return None
+        p0, p1, p2, p3 = self.points[:4]
+        cx = (p0.x() + p1.x() + p2.x() + p3.x()) / 4.0
+        cy = (p0.y() + p1.y() + p2.y() + p3.y()) / 4.0
+        dx = p1.x() - p0.x()
+        dy = p1.y() - p0.y()
+        w = math.hypot(dx, dy)
+        if w < 1e-6:
+            ux, uy = 1.0, 0.0
+            w = 1e-6
+        else:
+            ux, uy = dx / w, dy / w
+        # Prefer normal matching p0→p3
+        nx, ny = -uy, ux
+        hx = p3.x() - p0.x()
+        hy = p3.y() - p0.y()
+        if hx * nx + hy * ny < 0:
+            nx, ny = -nx, -ny
+        h = abs(hx * nx + hy * ny)
+        if h < 1e-6:
+            h = 1e-6
+        return cx, cy, w, h, ux, uy, nx, ny
+
+    def set_obb_corners(self, cx, cy, w, h, ux, uy, nx, ny):
+        """Rebuild 4 OBB corners from center, size and axes."""
+        hw, hh = w / 2.0, h / 2.0
+        self.points = [
+            QPointF(cx - ux * hw - nx * hh, cy - uy * hw - ny * hh),
+            QPointF(cx + ux * hw - nx * hh, cy + uy * hw - ny * hh),
+            QPointF(cx + ux * hw + nx * hh, cy + uy * hw + ny * hh),
+            QPointF(cx - ux * hw + nx * hh, cy - uy * hw + ny * hh),
+        ]
+        self.close()
+
+    def rotate_obb(self, delta_rad):
+        """Rotate OBB around its center by delta radians."""
+        geo = self.obb_geometry()
+        if not geo:
+            return
+        cx, cy, w, h, ux, uy, nx, ny = geo
+        c, s = math.cos(delta_rad), math.sin(delta_rad)
+        rux, ruy = ux * c - uy * s, ux * s + uy * c
+        rnx, rny = nx * c - ny * s, nx * s + ny * c
+        self.set_obb_corners(cx, cy, w, h, rux, ruy, rnx, rny)
+
+    def rotation_handle_pos(self, scale=1.0):
+        """Handle outside the OBB for interactive rotation (along +n)."""
+        geo = self.obb_geometry()
+        if not geo:
+            return None
+        cx, cy, w, h, _ux, _uy, nx, ny = geo
+        offset = max(w, h) * 0.5 + max(18.0, 22.0 / max(float(scale), 0.05))
+        return QPointF(cx + nx * offset, cy + ny * offset)
+
+    def convert_to_polygon(self):
+        """Demote OBB (or other closed shapes) to a free polygon.
+
+        After conversion, rotate/scale OBB handlers no longer apply —
+        only free vertex moves and body translate.
+        """
+        if self.shape_type == 'polygon':
+            return False
+        self.shape_type = 'polygon'
+        self.close()
+        return True
 
     def paint(self, painter):
         if self.points:
@@ -251,25 +326,44 @@ class Shape(object):
         if self.keypoints:
             self.paint_keypoints(painter)
 
+    def _label_anchor_xy(self):
+        """Screen position for the class label near the shape's top-left.
+
+        Axis-aligned boxes use the AABB top-left. Rotated rects (OBB) use the
+        visually top-left *vertex* so the label stays next to a real corner
+        instead of floating at the AABB corner (which is often empty space).
+        """
+        if not self.points:
+            return None
+        if self.is_obb():
+            # Among the 4 corners: topmost, then leftmost
+            anchor = min(self.points[:4], key=lambda p: (p.y(), p.x()))
+            return anchor.x(), anchor.y()
+        min_x = min(p.x() for p in self.points)
+        min_y = min(p.y() for p in self.points)
+        return min_x, min_y
+
     def _paint_label_text(self, painter):
         """Draw class name at the top-left of the shape (above fill)."""
-        min_x = sys.maxsize
-        min_y = sys.maxsize
+        anchor = self._label_anchor_xy()
+        if anchor is None:
+            return
+        min_x, min_y = anchor
         font_px = max(8, int(self.label_font_size))
         min_y_label = int(1.25 * font_px)
-        for point in self.points:
-            min_x = min(min_x, point.x())
-            min_y = min(min_y, point.y())
-        if min_x == sys.maxsize or min_y == sys.maxsize:
-            return
 
         font = QFont()
         font.setPointSize(font_px)
         font.setBold(True)
         painter.setFont(font)
         label = self.label if self.label is not None else ''
+        # Baseline sits on the y of the anchor; if too close to the image top,
+        # nudge downward so the glyph is not clipped.
         if min_y < min_y_label:
             min_y += min_y_label
+        elif self.is_obb():
+            # Slightly below the corner so the label hugs the vertex
+            min_y += max(2.0, font_px * 0.15)
 
         text_path = QPainterPath()
         text_path.addText(int(min_x), int(min_y), font, label)
@@ -412,7 +506,8 @@ class Shape(object):
         path.moveTo(self.points[0])
         for p in self.points[1:]:
             path.lineTo(p)
-        if self.is_closed():
+        # Rotated rects always close when 4 corners are present
+        if self.is_closed() or (self.shape_type == 'obb' and len(self.points) >= 4):
             path.lineTo(self.points[0])
         return path
 

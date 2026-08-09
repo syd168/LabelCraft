@@ -42,5 +42,6 @@
 <file alias="polygon">resources/icons/polygon.png</file>
 <file alias="ellipse">resources/icons/ellipse.png</file>
 <file alias="circle">resources/icons/circle.png</file>
+<file alias="obb">resources/icons/obb.png</file>
 </qresource>
 </RCC>

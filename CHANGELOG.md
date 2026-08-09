@@ -5,6 +5,38 @@ Newest releases first.
 
 ---
 
+## [3.1.0] — 2026-08-09
+
+### Summary
+
+Rotated rectangles (OBB), richer export formats for segmentation, and a redesigned export dialog.
+
+### Features
+
+- **Rotated rectangle (OBB)** drawing tool (`R`): two-step edge → width; edit with move / corner scale / rotate handle
+- Explicit **Convert to Polygon** for OBB (after convert: free vertices only, no rotate/scale)
+- **YOLO OBB** export (`cls x1 y1 … x4 y4` + `data.yaml`)
+- **YOLO Seg** export (polygon TXT + `data.yaml`)
+- **COCO Segmentation** dataset export (`images/` + `annotations/instances_default.json`)
+- Export dialog: default/editable destination path, wider two-column layout
+
+### Improvements
+
+- OBB class labels anchor to the visual top-left corner (not AABB)
+- LabelCraft JSON export preserves OBB vertices (no longer rewritten as AABB)
+- Existing **COCO** per-file export includes `segmentation` when polygon geometry exists
+
+### Installation
+
+```bash
+pip install -U labelcraft==3.1.0
+```
+
+- GitHub: https://github.com/syd168/LabelCraft/releases/tag/v3.1.0
+- PyPI: https://pypi.org/project/LabelCraft/3.1.0/
+
+---
+
 ## [3.0.3] — 2026-08-08
 
 ### Summary

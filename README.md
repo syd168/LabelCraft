@@ -1,11 +1,11 @@
 # LabelCraft - Intelligent Image Annotation Tool
 
-> **Version 3.0.3** — Project-first annotation for detection & pose, based on [labelImg](https://github.com/tzutalin/labelImg)
+> **Version 3.1.0** — Project-first annotation for detection, pose, OBB & segmentation, based on [labelImg](https://github.com/tzutalin/labelImg)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.5+-green.svg)](https://www.qt.io/)
-[![Version](https://img.shields.io/badge/version-3.0.3-orange.svg)](https://github.com/syd168/LabelCraft/releases)
+[![Version](https://img.shields.io/badge/version-3.1.0-orange.svg)](https://github.com/syd168/LabelCraft/releases)
 [![Downloads](https://pepy.tech/badge/labelcraft)](https://pepy.tech/project/labelcraft)
 [![PyPI](https://img.shields.io/pypi/v/labelcraft.svg)](https://pypi.org/project/LabelCraft/)
 
@@ -98,7 +98,7 @@ LabelCraft/
 
 ## Changelog
 
-Latest highlights (**3.0.3**): Preferences (`Ctrl+,`), theme/language persistence, JSON settings.
+Latest highlights (**3.1.0**): Rotated rectangles (OBB), YOLO OBB / YOLO Seg / COCO Seg export, redesigned export dialog.
 
 Full history: [CHANGELOG.md](CHANGELOG.md).
 

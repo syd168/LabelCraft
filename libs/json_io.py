@@ -88,6 +88,31 @@ class LabelCraftJSONWriter:
             shape['line_width'] = float(line_width)
         self.shapes.append(shape)
 
+    def add_obb(self, points, label, difficult=0,
+                line_color=None, fill_color=None, line_width=None):
+        """Add a rotated rectangle (4 corners preserved; bbox = axis-aligned bounds)."""
+        pts = [[int(round(p[0])), int(round(p[1]))] for p in points]
+        if len(pts) < 4:
+            return
+        pts = pts[:4]
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        shape = {
+            'label': label,
+            'type': 'obb',
+            'bbox': [min(xs), min(ys), max(xs), max(ys)],
+            'points': pts,
+            'difficult': bool(difficult),
+            'occluded': False,
+        }
+        if line_color is not None:
+            shape['line_color'] = list(line_color)
+        if fill_color is not None:
+            shape['fill_color'] = list(fill_color)
+        if line_width is not None:
+            shape['line_width'] = float(line_width)
+        self.shapes.append(shape)
+
     def add_ellipse(self, xmin, ymin, xmax, ymax, label, difficult=0,
                     shape_type='ellipse', line_color=None, fill_color=None,
                     line_width=None):

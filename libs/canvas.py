@@ -3,6 +3,8 @@ from PySide6.QtGui import *
 from PySide6.QtCore import *
 from PySide6.QtWidgets import *
 
+import math
+
 from libs.shape import Shape
 from libs.utils import distance
 
@@ -100,13 +102,23 @@ class Canvas(QWidget):
         # One undo snapshot per drag gesture
         self._gesture_undo_emitted = False
         # What CREATE mode draws:
-        # 'rectangle' | 'pose' | 'polygon' | 'ellipse' | 'circle'
-        # ellipse/circle are separate tools (type fixed at create time)
+        # 'rectangle' | 'pose' | 'polygon' | 'ellipse' | 'circle' | 'obb'
+        # ellipse/circle/obb are separate tools (type fixed at create time)
         self.create_shape_type = 'rectangle'
         # Ellipse/circle edit anchors (fixed for one corner-drag gesture)
         self._ellipse_edit_center = None
         self._ellipse_edit_opp = None
         self._last_edit_pos = None
+        # Rotated-rect (OBB) two-step draw: edge then width
+        self._obb_phase = None  # None | 'edge' | 'width'
+        self._obb_p0 = None
+        self._obb_p1 = None
+        # OBB edit: keep rectangle while scaling; rotate via handle
+        self.h_rotate = False
+        self._obb_edit_ux = self._obb_edit_uy = None
+        self._obb_edit_nx = self._obb_edit_ny = None
+        self._obb_rotate_center = None
+        self._obb_rotate_last_angle = None
 
         # initialisation for panning
         self.pan_initial_pos = QPoint()
@@ -117,6 +129,52 @@ class Canvas(QWidget):
     def is_ellipse_drawing(self):
         """True while drag-drawing either the ellipse or circle tool."""
         return self.drawing() and self.create_shape_type in ('ellipse', 'circle')
+
+    def is_obb_drawing(self):
+        """True while drawing a rotated rectangle (two-step edge → width)."""
+        return self.drawing() and self.create_shape_type == 'obb'
+
+    def _clear_obb_state(self):
+        self._obb_phase = None
+        self._obb_p0 = None
+        self._obb_p1 = None
+
+    def _clear_obb_edit_anchors(self):
+        self._obb_edit_ux = self._obb_edit_uy = None
+        self._obb_edit_nx = self._obb_edit_ny = None
+        self._obb_rotate_center = None
+        self._obb_rotate_last_angle = None
+        self.h_rotate = False
+
+    @staticmethod
+    def _obb_corners_from_edge(p0, p1, cursor):
+        """Build 4 corners: edge p0→p1, width = signed distance of cursor to edge."""
+        dx = p1.x() - p0.x()
+        dy = p1.y() - p0.y()
+        length = (dx * dx + dy * dy) ** 0.5
+        if length < 1e-6:
+            return None
+        ux, uy = dx / length, dy / length
+        nx, ny = -uy, ux
+        width = (cursor.x() - p0.x()) * nx + (cursor.y() - p0.y()) * ny
+        return [
+            QPointF(p0),
+            QPointF(p1),
+            QPointF(p1.x() + nx * width, p1.y() + ny * width),
+            QPointF(p0.x() + nx * width, p0.y() + ny * width),
+        ]
+
+    @staticmethod
+    def _obb_edge_width(p0, p1, cursor):
+        """Return (edge_length, abs_width) for size checks / HUD."""
+        dx = p1.x() - p0.x()
+        dy = p1.y() - p0.y()
+        length = (dx * dx + dy * dy) ** 0.5
+        if length < 1e-6:
+            return 0.0, 0.0
+        nx, ny = -dy / length, dx / length
+        width = abs((cursor.x() - p0.x()) * nx + (cursor.y() - p0.y()) * ny)
+        return length, width
 
     def _oval_from_center(self, ev=None, shape=None):
         """Shift = from center — circle only (ellipse has no Shift behavior)."""
@@ -239,6 +297,9 @@ class Canvas(QWidget):
 
     def set_editing(self, value=True):
         self.mode = self.EDIT if value else self.CREATE
+        if value:
+            # Leaving create mode cancels in-progress OBB
+            self._clear_obb_state()
         if not value:  # Create
             self.un_highlight()
             self.de_select_shape()
@@ -300,6 +361,31 @@ class Canvas(QWidget):
                             len(self.current),
                         )
                     )
+                elif self.is_obb_drawing():
+                    if (self._obb_phase == 'width'
+                            and self._obb_p0 is not None
+                            and self._obb_p1 is not None):
+                        corners = self._obb_corners_from_edge(
+                            self._obb_p0, self._obb_p1, pos)
+                        if corners is not None:
+                            self.current.points = corners
+                            self.current.close()
+                            edge_len, width = self._obb_edge_width(
+                                self._obb_p0, self._obb_p1, pos)
+                            tip = window.format_coordinates(
+                                width=edge_len, height=width,
+                                x=pos.x(), y=pos.y())
+                            tip += '  |  ' + self._tr(
+                                'canvasObbWidthTip',
+                                'OBB: drag width, click/release to finish')
+                            self.parent().window().label_coordinates.setText(tip)
+                    else:
+                        self.line.points = [self.current[0], pos]
+                        tip = window.format_coordinates(x=pos.x(), y=pos.y())
+                        tip += '  |  ' + self._tr(
+                            'canvasObbEdgeTip',
+                            'OBB: drag first edge (sets angle), release')
+                        self.parent().window().label_coordinates.setText(tip)
                 elif self.is_ellipse_drawing():
                     force_circle = self._oval_force_circle()
                     from_center = self._oval_from_center(ev)
@@ -372,6 +458,12 @@ class Canvas(QWidget):
                 self.shapeMoved.emit()
                 self.repaint()
                 return
+            if self.h_rotate and self.selected_shape is not None:
+                self._emit_edit_about_to_begin_once()
+                self._rotate_obb_to(pos)
+                self.shapeMoved.emit()
+                self.repaint()
+                return
             if self.selected_vertex():
                 self._emit_edit_about_to_begin_once()
                 self._last_edit_pos = pos
@@ -387,6 +479,9 @@ class Canvas(QWidget):
                 if getattr(self.h_shape, 'shape_type', None) == 'circle':
                     tip += '  |  ' + self._tr(
                         'canvasShiftFromCenter', 'Shift=from center')
+                elif getattr(self.h_shape, 'is_obb', lambda: False)():
+                    tip += '  |  ' + self._tr(
+                        'canvasObbScaleTip', 'OBB: drag corner to scale')
                 self.parent().window().label_coordinates.setText(tip)
             elif self.selected_shape and self.prev_point:
                 self._emit_edit_about_to_begin_once()
@@ -414,6 +509,24 @@ class Canvas(QWidget):
         # - Highlight keypoints / vertices / shapes
         self.setToolTip(self._tr('canvasTipImage', 'Image'))
         priority_list = self.shapes + ([self.selected_shape] if self.selected_shape else [])
+        # OBB rotation handle (selected OBB only) — above vertices
+        if (self.selected_shape is not None
+                and getattr(self.selected_shape, 'is_obb', lambda: False)()
+                and self.isVisible(self.selected_shape)):
+            handle = self.selected_shape.rotation_handle_pos(self.scale)
+            if handle is not None and distance(handle - pos) <= self.hit_epsilon():
+                if self.h_shape:
+                    self.h_shape.highlight_clear()
+                self.h_rotate = True
+                self.h_vertex = self.h_keypoint = None
+                self.h_shape = self.selected_shape
+                self.override_cursor(CURSOR_POINT)
+                self.setToolTip(self._tr(
+                    'canvasTipObbRotate', 'Drag to rotate the rectangle'))
+                self.setStatusTip(self.toolTip())
+                self.update()
+                return
+        self.h_rotate = False
         for shape in reversed([s for s in priority_list if self.isVisible(s)]):
             kpt_index = shape.nearest_keypoint(pos, self.epsilon) if shape.keypoints else None
             if kpt_index is not None:
@@ -446,7 +559,12 @@ class Canvas(QWidget):
                 self.h_keypoint = None
                 shape.highlight_vertex(index, shape.MOVE_VERTEX)
                 self.override_cursor(CURSOR_POINT)
-                self.setToolTip(self._tr('canvasTipResize', 'Click & drag to resize'))
+                tip_key = 'canvasTipObbScale' if getattr(
+                    shape, 'is_obb', lambda: False)() else 'canvasTipResize'
+                tip_def = ('Click & drag corner to scale (keeps rectangle)'
+                           if tip_key == 'canvasTipObbScale'
+                           else 'Click & drag to resize')
+                self.setToolTip(self._tr(tip_key, tip_def))
                 self.setStatusTip(self.toolTip())
                 self.update()
                 break
@@ -477,6 +595,7 @@ class Canvas(QWidget):
                 self.update()
             self.h_vertex, self.h_shape = None, None
             self.h_keypoint = None
+            self.h_rotate = False
             self.override_cursor(CURSOR_DEFAULT)
 
     def mousePressEvent(self, ev):
@@ -487,12 +606,20 @@ class Canvas(QWidget):
                 self.editAboutToBegin.emit()
                 self._place_keypoint_at(pos)
             elif self.drawing():
-                self.handle_drawing(pos)
+                # OBB width phase finishes on release; ignore press
+                if not (self.is_obb_drawing() and self._obb_phase == 'width'):
+                    self.handle_drawing(pos)
             else:
                 selection = self.select_shape_point(pos)
                 self.prev_point = pos
+                if self.h_rotate and self.selected_shape is not None:
+                    geo = self.selected_shape.obb_geometry()
+                    if geo:
+                        self._obb_rotate_center = QPointF(geo[0], geo[1])
+                        self._obb_rotate_last_angle = math.atan2(
+                            pos.y() - geo[1], pos.x() - geo[0])
 
-                if selection is None:
+                if selection is None and not self.h_rotate:
                     # pan
                     QApplication.setOverrideCursor(QCursor(Qt.CursorShape.OpenHandCursor))
                     self.pan_initial_pos = ev.pos()
@@ -552,6 +679,7 @@ class Canvas(QWidget):
                 self.repaint()
             self._gesture_undo_emitted = False
             self._clear_ellipse_edit_anchors()
+            self._clear_obb_edit_anchors()
             self.editGestureFinished.emit()
         elif ev.button() == Qt.MouseButton.LeftButton and self.selected_shape:
             if self.selected_vertex():
@@ -560,6 +688,7 @@ class Canvas(QWidget):
                 self.override_cursor(CURSOR_GRAB)
             self._gesture_undo_emitted = False
             self._clear_ellipse_edit_anchors()
+            self._clear_obb_edit_anchors()
             self.editGestureFinished.emit()
         elif ev.button() == Qt.MouseButton.LeftButton:
             pos = self.transform_pos(ev.pos())
@@ -571,6 +700,7 @@ class Canvas(QWidget):
                 QApplication.restoreOverrideCursor()
             self._gesture_undo_emitted = False
             self._clear_ellipse_edit_anchors()
+            self._clear_obb_edit_anchors()
             self.editGestureFinished.emit()
 
     def end_move(self, copy=False):
@@ -606,6 +736,11 @@ class Canvas(QWidget):
                 self.current and getattr(self.current, 'shape_type', None) in (
                     'ellipse', 'circle')):
             self._handle_ellipse_drawing(pos)
+            return
+
+        if self.is_obb_drawing() or (
+                self.current and getattr(self.current, 'shape_type', None) == 'obb'):
+            self._handle_obb_drawing(pos)
             return
 
         if self.current and self.current.reach_max_points() is False:
@@ -661,6 +796,61 @@ class Canvas(QWidget):
             self.set_hiding()
             self.drawingPolygon.emit(True)
             self.update()
+
+    def _handle_obb_drawing(self, pos):
+        """Two-step rotated rectangle: drag edge → drag width → finish."""
+        if self.out_of_pixmap(pos) and self.current is None and self._obb_phase != 'width':
+            return
+        if self.out_of_pixmap(pos):
+            size = self.pixmap.size()
+            pos = QPointF(
+                min(max(0, pos.x()), size.width()),
+                min(max(0, pos.y()), size.height()),
+            )
+
+        # Phase 2: finish rotated rect
+        if (self._obb_phase == 'width'
+                and self._obb_p0 is not None and self._obb_p1 is not None):
+            edge_len, width = self._obb_edge_width(self._obb_p0, self._obb_p1, pos)
+            corners = self._obb_corners_from_edge(self._obb_p0, self._obb_p1, pos)
+            if corners is None or edge_len < 3.0 or width < 3.0:
+                # Too small: cancel width step, keep drawing mode for retry
+                self.current = Shape(shape_type='obb')
+                self.current.points = [QPointF(self._obb_p0), QPointF(self._obb_p1)]
+                self.update()
+                return
+            self.current = Shape(shape_type='obb')
+            self.current.points = corners
+            self._clear_obb_state()
+            self.finalise()
+            return
+
+        # Phase 1 end: lock edge, enter width phase
+        if self._obb_phase == 'edge' and self.current is not None:
+            p0 = self.current[0]
+            if distance(QPointF(pos.x() - p0.x(), pos.y() - p0.y())) < 3.0:
+                self.current = None
+                self._clear_obb_state()
+                self.drawingPolygon.emit(False)
+                self.update()
+                return
+            self._obb_p0 = QPointF(p0)
+            self._obb_p1 = QPointF(pos)
+            self._obb_phase = 'width'
+            self.current = Shape(shape_type='obb')
+            self.current.points = [QPointF(self._obb_p0), QPointF(self._obb_p1)]
+            self.line.points = [QPointF(self._obb_p0), QPointF(self._obb_p1)]
+            self.update()
+            return
+
+        # Phase 1 start
+        self._obb_phase = 'edge'
+        self.current = Shape(shape_type='obb')
+        self.current.add_point(pos)
+        self.line.points = [pos, pos]
+        self.set_hiding()
+        self.drawingPolygon.emit(True)
+        self.update()
 
     def _handle_polygon_drawing(self, pos):
         """Click-to-add vertices; close by first-vertex / Enter / double-click."""
@@ -734,7 +924,21 @@ class Canvas(QWidget):
 
     def select_shape_point(self, point):
         """Select the first shape created which contains this point."""
+        # OBB rotation handle (before deselect — handle sits outside the box)
+        for shape in reversed(self.shapes):
+            if not self.isVisible(shape) or not getattr(shape, 'is_obb', lambda: False)():
+                continue
+            handle = shape.rotation_handle_pos(self.scale)
+            if handle is not None and distance(handle - point) <= self.hit_epsilon():
+                self.de_select_shape()
+                self.select_shape(shape)
+                self.h_rotate = True
+                self.h_vertex = self.h_keypoint = None
+                self.h_shape = shape
+                return shape
+
         self.de_select_shape()
+        self.h_rotate = False
         if self.selected_keypoint():  # A pose keypoint is marked for selection.
             index, shape = self.h_keypoint, self.h_shape
             shape.highlight_keypoint(index)
@@ -751,6 +955,19 @@ class Canvas(QWidget):
                 continue
             if getattr(shape, 'is_ellipse_like', lambda: False)():
                 index = shape.nearest_vertex(point, max(self.hit_epsilon() * 1.35, 16.0))
+                if index is not None:
+                    self.h_vertex, self.h_shape = index, shape
+                    self.h_keypoint = None
+                    shape.highlight_vertex(index, shape.MOVE_VERTEX)
+                    self.select_shape(shape)
+                    return self.h_vertex
+        # Corners (incl. OBB) before body hit-test
+        for shape in reversed(self.shapes):
+            if not self.isVisible(shape):
+                continue
+            if getattr(shape, 'shape_type', None) in (
+                    'obb', 'rectangle', 'pose', 'polygon'):
+                index = shape.nearest_vertex(point, self.hit_epsilon())
                 if index is not None:
                     self.h_vertex, self.h_shape = index, shape
                     self.h_keypoint = None
@@ -817,6 +1034,37 @@ class Canvas(QWidget):
                 shape.highlight_vertex(near, shape.MOVE_VERTEX)
             return
 
+        # OBB: scale while keeping a rectangle (does NOT become a free polygon)
+        if getattr(shape, 'is_obb', lambda: False)() and len(shape.points) == 4:
+            if self._obb_edit_ux is None:
+                geo = shape.obb_geometry()
+                if not geo:
+                    return
+                _cx, _cy, _w, _h, ux, uy, nx, ny = geo
+                self._obb_edit_ux, self._obb_edit_uy = ux, uy
+                self._obb_edit_nx, self._obb_edit_ny = nx, ny
+            opp = shape.points[(index + 2) % 4]
+            vx = pos.x() - opp.x()
+            vy = pos.y() - opp.y()
+            a = vx * self._obb_edit_ux + vy * self._obb_edit_uy
+            b = vx * self._obb_edit_nx + vy * self._obb_edit_ny
+            if abs(a) < 3.0:
+                a = 3.0 if a >= 0 else -3.0
+            if abs(b) < 3.0:
+                b = 3.0 if b >= 0 else -3.0
+            sux, suy = ((self._obb_edit_ux, self._obb_edit_uy)
+                        if a >= 0 else (-self._obb_edit_ux, -self._obb_edit_uy))
+            snx, sny = ((self._obb_edit_nx, self._obb_edit_ny)
+                        if b >= 0 else (-self._obb_edit_nx, -self._obb_edit_ny))
+            cx = (opp.x() + pos.x()) / 2.0
+            cy = (opp.y() + pos.y()) / 2.0
+            shape.set_obb_corners(cx, cy, abs(a), abs(b), sux, suy, snx, sny)
+            near = shape.nearest_vertex(pos, 1e9)
+            if near is not None:
+                self.h_vertex = near
+                shape.highlight_vertex(near, shape.MOVE_VERTEX)
+            return
+
         if self.draw_square:
             opposite_point_index = (index + 2) % 4
             opposite_point = shape[opposite_point_index]
@@ -832,8 +1080,9 @@ class Canvas(QWidget):
         shape.move_vertex_by(index, shift_pos)
 
         # Axis-aligned bbox coupling only for 4-corner rectangle/pose boxes
-        if (getattr(shape, 'shape_type', 'rectangle') == 'polygon'
-                or len(shape.points) != 4):
+        # (polygon: free corner move; OBB handled above)
+        st = getattr(shape, 'shape_type', 'rectangle')
+        if st == 'polygon' or len(shape.points) != 4:
             return
 
         left_index = (index + 1) % 4
@@ -846,6 +1095,33 @@ class Canvas(QWidget):
             right_shift = QPointF(0, shift_pos.y())
         shape.move_vertex_by(right_index, right_shift)
         shape.move_vertex_by(left_index, left_shift)
+
+    def _rotate_obb_to(self, pos):
+        """Rotate selected OBB so the handle follows the cursor angle."""
+        shape = self.selected_shape
+        if shape is None or not getattr(shape, 'is_obb', lambda: False)():
+            return
+        if self._obb_rotate_center is None:
+            geo = shape.obb_geometry()
+            if not geo:
+                return
+            self._obb_rotate_center = QPointF(geo[0], geo[1])
+            self._obb_rotate_last_angle = math.atan2(
+                pos.y() - geo[1], pos.x() - geo[0])
+            return
+        cx, cy = self._obb_rotate_center.x(), self._obb_rotate_center.y()
+        angle = math.atan2(pos.y() - cy, pos.x() - cx)
+        if self._obb_rotate_last_angle is None:
+            self._obb_rotate_last_angle = angle
+            return
+        delta = angle - self._obb_rotate_last_angle
+        # unwrap
+        while delta > math.pi:
+            delta -= 2 * math.pi
+        while delta < -math.pi:
+            delta += 2 * math.pi
+        shape.rotate_obb(delta)
+        self._obb_rotate_last_angle = angle
 
     def bounded_move_shape(self, shape, pos):
         if self.out_of_pixmap(pos):
@@ -949,13 +1225,56 @@ class Canvas(QWidget):
             self.current.fill = False
             self.line.fill = False
             self.current.paint(p)
-            self.line.paint(p)
+            if not (self.is_obb_drawing() and self._obb_phase == 'width'):
+                self.line.paint(p)
         if self.selected_shape_copy:
             self.selected_shape_copy.paint(p)
 
+        # OBB rotation handle for selected rotated rectangle
+        if (self.selected_shape is not None
+                and getattr(self.selected_shape, 'is_obb', lambda: False)()
+                and self.isVisible(self.selected_shape)):
+            handle = self.selected_shape.rotation_handle_pos(self.scale)
+            geo = self.selected_shape.obb_geometry()
+            if handle is not None and geo is not None:
+                cx, cy = geo[0], geo[1]
+                under = QPen(QColor(255, 255, 255, 200))
+                under.setWidth(max(2, int(round(2.5 / self.scale))))
+                p.setPen(under)
+                p.drawLine(QPointF(cx, cy), handle)
+                pen = QPen(QColor(255, 140, 0, 240))
+                pen.setWidth(max(2, int(round(2.0 / self.scale))))
+                p.setPen(pen)
+                p.drawLine(QPointF(cx, cy), handle)
+                r = max(5.0, 7.0 / max(self.scale, 0.05))
+                if self.h_rotate:
+                    p.setBrush(QBrush(QColor(255, 80, 80, 230)))
+                else:
+                    p.setBrush(QBrush(QColor(255, 180, 0, 230)))
+                p.setPen(QPen(QColor(255, 255, 255, 230),
+                              max(1, int(round(1.5 / self.scale)))))
+                p.drawEllipse(handle, r, r)
+
+        # OBB width preview (rotated polygon fill)
+        if (self.is_obb_drawing() and self._obb_phase == 'width'
+                and self.current is not None and len(self.current) >= 4):
+            path = self.current.make_path()
+            fill = QColor(self.drawing_rect_color)
+            fill.setAlpha(28)
+            under = QPen(QColor(255, 255, 255, 180))
+            under.setWidth(max(3, int(round(4.0 / self.scale))))
+            p.setPen(under)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPath(path)
+            pen = QPen(self.drawing_rect_color)
+            pen.setWidth(max(2, int(round(2.5 / self.scale))))
+            p.setPen(pen)
+            p.setBrush(QBrush(fill))
+            p.drawPath(path)
         # Rect / ellipse preview while drag-drawing; polygon uses polyline
-        if (self.current is not None and len(self.line) == 2
-                and not self.is_polygon_drawing()):
+        elif (self.current is not None and len(self.line) == 2
+                and not self.is_polygon_drawing()
+                and not self.is_obb_drawing()):
             left_top = self.line[0]
             right_bottom = self.line[1]
             rect_width = right_bottom.x() - left_top.x()
@@ -1094,9 +1413,10 @@ class Canvas(QWidget):
             self.keypointPlacementFinished.emit()
             self.shapeMoved.emit()
             self.update()
-        elif key == Qt.Key_Escape and self.current:
+        elif key == Qt.Key_Escape and (self.current or self._obb_phase):
             print('ESC press')
             self.current = None
+            self._clear_obb_state()
             self.drawingPolygon.emit(False)
             self.update()
         elif key == Qt.Key_Shift:

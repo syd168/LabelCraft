@@ -232,6 +232,14 @@ class LabelFile(object):
                     line_width=shape.get('line_width'),
                 )
                 continue
+            if shape_type == 'obb':
+                writer.add_obb(
+                    points, label, difficult,
+                    line_color=shape.get('line_color'),
+                    fill_color=shape.get('fill_color'),
+                    line_width=shape.get('line_width'),
+                )
+                continue
             bnd_box = LabelFile.convert_points_to_bnd_box(points)
             if shape_type in ('ellipse', 'circle'):
                 writer.add_ellipse(
